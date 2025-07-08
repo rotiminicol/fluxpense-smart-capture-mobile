@@ -142,12 +142,13 @@ const AddExpense = () => {
                   capture="environment"
                   onChange={handleReceiptUpload}
                   className="hidden"
+                  id="camera-input"
                 />
                 <Button
                   type="button"
                   variant="outline"
                   className="w-full border-blue-600 text-blue-600 hover:bg-blue-50"
-                  onClick={() => document.querySelector('input[type="file"]')?.click()}
+                  onClick={() => (document.getElementById('camera-input') as HTMLInputElement)?.click()}
                 >
                   <Camera className="w-4 h-4 mr-2" />
                   Take Photo
@@ -160,12 +161,13 @@ const AddExpense = () => {
                   accept="image/*"
                   onChange={handleReceiptUpload}
                   className="hidden"
+                  id="upload-input"
                 />
                 <Button
                   type="button"
                   variant="outline"
                   className="w-full border-blue-600 text-blue-600 hover:bg-blue-50"
-                  onClick={() => document.querySelectorAll('input[type="file"]')[1]?.click()}
+                  onClick={() => (document.getElementById('upload-input') as HTMLInputElement)?.click()}
                 >
                   <Upload className="w-4 h-4 mr-2" />
                   Upload
