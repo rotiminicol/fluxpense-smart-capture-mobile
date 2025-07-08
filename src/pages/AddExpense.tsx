@@ -58,6 +58,27 @@ const AddExpense = () => {
     }
   };
 
+  const handleCameraCapture = () => {
+    // Check if camera is available
+    if (navigator.mediaDevices && navigator.mediaDevices.getUserMedia) {
+      navigator.mediaDevices.getUserMedia({ video: true })
+        .then(() => {
+          // Camera access granted, trigger file input
+          (document.getElementById('camera-input') as HTMLInputElement)?.click();
+        })
+        .catch(() => {
+          toast({
+            title: "Camera Access Denied",
+            description: "Please allow camera access to take photos of receipts.",
+            variant: "destructive",
+          });
+        });
+    } else {
+      // Fallback to file input
+      (document.getElementById('camera-input') as HTMLInputElement)?.click();
+    }
+  };
+
   const handleSave = () => {
     if (!formData.amount || !formData.category) {
       toast({
@@ -135,7 +156,7 @@ const AddExpense = () => {
             </div>
 
             <div className="flex space-x-3">
-              <label className="flex-1">
+              <div className="flex-1">
                 <input
                   type="file"
                   accept="image/*"
@@ -148,14 +169,14 @@ const AddExpense = () => {
                   type="button"
                   variant="outline"
                   className="w-full border-blue-600 text-blue-600 hover:bg-blue-50"
-                  onClick={() => (document.getElementById('camera-input') as HTMLInputElement)?.click()}
+                  onClick={handleCameraCapture}
                 >
                   <Camera className="w-4 h-4 mr-2" />
                   Take Photo
                 </Button>
-              </label>
+              </div>
               
-              <label className="flex-1">
+              <div className="flex-1">
                 <input
                   type="file"
                   accept="image/*"
@@ -172,7 +193,7 @@ const AddExpense = () => {
                   <Upload className="w-4 h-4 mr-2" />
                   Upload
                 </Button>
-              </label>
+              </div>
             </div>
           </div>
         </Card>

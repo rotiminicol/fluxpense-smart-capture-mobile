@@ -16,6 +16,14 @@ import Profile from "./pages/Profile";
 import Settings from "./pages/Settings";
 import Reports from "./pages/Reports";
 import Categories from "./pages/Categories";
+import EditProfile from "./pages/EditProfile";
+import Notifications from "./pages/Notifications";
+import PaymentMethods from "./pages/PaymentMethods";
+import PrivacySecurity from "./pages/PrivacySecurity";
+import HelpSupport from "./pages/HelpSupport";
+import TransactionDetails from "./pages/TransactionDetails";
+import CategoryDetails from "./pages/CategoryDetails";
+import Transactions from "./pages/Transactions";
 import NotFound from "./pages/NotFound";
 
 const queryClient = new QueryClient();
@@ -37,9 +45,17 @@ const App = () => (
             <Route path="/add-expense" element={<AddExpense />} />
             <Route path="/add-income" element={<AddIncome />} />
             <Route path="/profile" element={<Profile />} />
+            <Route path="/profile/edit" element={<EditProfile />} />
+            <Route path="/notifications" element={<Notifications />} />
+            <Route path="/payment-methods" element={<PaymentMethods />} />
+            <Route path="/privacy" element={<PrivacySecurity />} />
+            <Route path="/help" element={<HelpSupport />} />
             <Route path="/settings" element={<Settings />} />
             <Route path="/reports" element={<Reports />} />
             <Route path="/categories" element={<Categories />} />
+            <Route path="/transactions" element={<Transactions />} />
+            <Route path="/transaction-details" element={<TransactionDetails />} />
+            <Route path="/category-details" element={<CategoryDetails />} />
             <Route path="*" element={<NotFound />} />
           </Routes>
         </div>

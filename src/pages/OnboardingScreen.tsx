@@ -1,4 +1,3 @@
-
 import { useState } from "react";
 import { useNavigate } from "react-router-dom";
 import { Button } from "@/components/ui/button";
@@ -16,6 +15,20 @@ const OnboardingScreen = () => {
     budgetGoal: "",
     categories: [] as string[],
   });
+
+  const currencies = [
+    { value: "USD", label: "USD ($)" },
+    { value: "EUR", label: "EUR (€)" },
+    { value: "GBP", label: "GBP (£)" },
+    { value: "NGN", label: "NGN (₦)" },
+    { value: "JPY", label: "JPY (¥)" },
+    { value: "CAD", label: "CAD (C$)" },
+    { value: "AUD", label: "AUD (A$)" },
+    { value: "INR", label: "INR (₹)" },
+    { value: "ZAR", label: "ZAR (R)" },
+    { value: "KES", label: "KES (KSh)" },
+    { value: "GHS", label: "GHS (₵)" },
+  ];
 
   const steps = [
     {
@@ -40,10 +53,11 @@ const OnboardingScreen = () => {
                 <SelectValue />
               </SelectTrigger>
               <SelectContent>
-                <SelectItem value="USD">USD ($)</SelectItem>
-                <SelectItem value="EUR">EUR (€)</SelectItem>
-                <SelectItem value="GBP">GBP (£)</SelectItem>
-                <SelectItem value="JPY">JPY (¥)</SelectItem>
+                {currencies.map((currency) => (
+                  <SelectItem key={currency.value} value={currency.value}>
+                    {currency.label}
+                  </SelectItem>
+                ))}
               </SelectContent>
             </Select>
           </div>
