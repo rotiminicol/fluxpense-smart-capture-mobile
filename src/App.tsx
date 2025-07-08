@@ -25,8 +25,32 @@ import TransactionDetails from "./pages/TransactionDetails";
 import CategoryDetails from "./pages/CategoryDetails";
 import Transactions from "./pages/Transactions";
 import NotFound from "./pages/NotFound";
+import ForgotPassword from "./pages/ForgotPassword";
+import { AnimatePresence, motion } from "framer-motion";
+import { Outlet, useLocation } from "react-router-dom";
+import BottomNavigation from "@/components/BottomNavigation";
 
 const queryClient = new QueryClient();
+
+const LayoutWithBottomNav = () => {
+  const location = useLocation();
+  return (
+    <>
+      <AnimatePresence mode="wait">
+        <motion.div
+          key={location.pathname}
+          initial={{ x: 100, opacity: 0 }}
+          animate={{ x: 0, opacity: 1 }}
+          exit={{ x: -100, opacity: 0 }}
+          transition={{ duration: 0.3 }}
+        >
+          <Outlet />
+        </motion.div>
+      </AnimatePresence>
+      <BottomNavigation />
+    </>
+  );
+};
 
 const App = () => (
   <QueryClientProvider client={queryClient}>
@@ -41,9 +65,15 @@ const App = () => (
             <Route path="/login" element={<LoginScreen />} />
             <Route path="/signup" element={<SignUpScreen />} />
             <Route path="/onboarding" element={<OnboardingScreen />} />
-            <Route path="/dashboard" element={<Dashboard />} />
-            <Route path="/add-expense" element={<AddExpense />} />
-            <Route path="/add-income" element={<AddIncome />} />
+            {/* Tabbed pages with persistent bottom nav and slide transitions */}
+            <Route element={<LayoutWithBottomNav />}>
+              <Route path="/dashboard" element={<Dashboard />} />
+              <Route path="/reports" element={<Reports />} />
+              <Route path="/categories" element={<Categories />} />
+              <Route path="/add-expense" element={<AddExpense />} />
+              <Route path="/add-income" element={<AddIncome />} />
+            </Route>
+            {/* All other pages (no bottom nav) */}
             <Route path="/profile" element={<Profile />} />
             <Route path="/profile/edit" element={<EditProfile />} />
             <Route path="/notifications" element={<Notifications />} />
@@ -51,11 +81,10 @@ const App = () => (
             <Route path="/privacy" element={<PrivacySecurity />} />
             <Route path="/help" element={<HelpSupport />} />
             <Route path="/settings" element={<Settings />} />
-            <Route path="/reports" element={<Reports />} />
-            <Route path="/categories" element={<Categories />} />
             <Route path="/transactions" element={<Transactions />} />
             <Route path="/transaction-details" element={<TransactionDetails />} />
             <Route path="/category-details" element={<CategoryDetails />} />
+            <Route path="/forgot-password" element={<ForgotPassword />} />
             <Route path="*" element={<NotFound />} />
           </Routes>
         </div>

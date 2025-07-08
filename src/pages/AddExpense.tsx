@@ -1,5 +1,5 @@
 
-import { useState } from "react";
+import { useState, useRef } from "react";
 import { useNavigate } from "react-router-dom";
 import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
@@ -21,7 +21,11 @@ const AddExpense = () => {
     description: "",
     date: new Date().toISOString().split('T')[0],
     receipt: null as File | null,
+    receiptUrl: ""
   });
+  const [inputFocus, setInputFocus] = useState<string | null>(null);
+  const cameraInputRef = useRef<HTMLInputElement>(null);
+  const uploadInputRef = useRef<HTMLInputElement>(null);
 
   const categories = [
     "Food & Dining",
@@ -38,10 +42,8 @@ const AddExpense = () => {
   const handleReceiptUpload = (event: React.ChangeEvent<HTMLInputElement>) => {
     const file = event.target.files?.[0];
     if (file) {
-      setFormData(prev => ({ ...prev, receipt: file }));
+      setFormData(prev => ({ ...prev, receipt: file, receiptUrl: URL.createObjectURL(file) }));
       setIsScanning(true);
-      
-      // Simulate AI processing
       setTimeout(() => {
         setFormData(prev => ({
           ...prev,
@@ -59,12 +61,10 @@ const AddExpense = () => {
   };
 
   const handleCameraCapture = () => {
-    // Check if camera is available
     if (navigator.mediaDevices && navigator.mediaDevices.getUserMedia) {
       navigator.mediaDevices.getUserMedia({ video: true })
         .then(() => {
-          // Camera access granted, trigger file input
-          (document.getElementById('camera-input') as HTMLInputElement)?.click();
+          cameraInputRef.current?.click();
         })
         .catch(() => {
           toast({
@@ -74,8 +74,7 @@ const AddExpense = () => {
           });
         });
     } else {
-      // Fallback to file input
-      (document.getElementById('camera-input') as HTMLInputElement)?.click();
+      cameraInputRef.current?.click();
     }
   };
 
@@ -88,7 +87,6 @@ const AddExpense = () => {
       });
       return;
     }
-
     toast({
       title: "Expense Added!",
       description: `$${formData.amount} expense saved successfully.`,
@@ -97,23 +95,24 @@ const AddExpense = () => {
   };
 
   return (
-    <div className="min-h-screen bg-gray-50 pb-20">
+    <div className="min-h-screen bg-gray-50 pb-20 animate-fade-in-up">
       {/* Header */}
-      <div className="bg-white px-4 py-4 border-b border-gray-100">
+      <div className="bg-white/80 backdrop-blur-lg px-4 py-4 border-b border-gray-100 shadow-xl rounded-b-2xl">
         <div className="flex items-center justify-between">
           <Button
             variant="ghost"
-            size="sm"
+            size="icon"
             onClick={() => navigate(-1)}
-            className="text-gray-600"
+            className="w-11 h-11 rounded-full bg-white/80 shadow-lg border border-blue-100 hover:bg-blue-50 text-blue-600 flex items-center justify-center transition-all duration-200"
+            aria-label="Back"
           >
-            <ArrowLeft className="w-5 h-5" />
+            <ArrowLeft className="w-6 h-6" />
           </Button>
           <h1 className="text-lg font-semibold">Add Expense</h1>
           <Button
             onClick={handleSave}
             disabled={!formData.amount || !formData.category}
-            className="bg-blue-600 hover:bg-blue-700 text-white text-sm px-4 py-2"
+            className="bg-blue-600 hover:bg-blue-700 active:scale-[0.98] text-white text-base px-6 py-3 rounded-2xl font-bold shadow-lg transition-all duration-150 animate-pulse-on-press"
           >
             Save
           </Button>
@@ -122,10 +121,10 @@ const AddExpense = () => {
 
       <div className="px-4 py-6 space-y-6">
         {/* Receipt Scanner */}
-        <Card className="p-6">
+        <Card className="p-6 glass-card rounded-2xl shadow-xl">
           <h3 className="text-lg font-semibold mb-4">Smart Receipt Scanner</h3>
           <div className="space-y-4">
-            <div className="border-2 border-dashed border-gray-300 rounded-xl p-8 text-center">
+            <div className="border-2 border-dashed border-gray-300 rounded-xl p-8 text-center bg-white/60 backdrop-blur-md transition-all duration-200">
               {isScanning ? (
                 <div className="space-y-4">
                   <div className="animate-spin rounded-full h-12 w-12 border-b-2 border-blue-600 mx-auto"></div>
@@ -134,11 +133,18 @@ const AddExpense = () => {
                 </div>
               ) : formData.receipt ? (
                 <div className="space-y-4">
-                  <div className="bg-green-100 text-green-600 rounded-full w-12 h-12 flex items-center justify-center mx-auto">
+                  <div className="bg-green-100 text-green-600 rounded-full w-12 h-12 flex items-center justify-center mx-auto animate-zoom-in">
                     <Scan className="w-6 h-6" />
                   </div>
                   <p className="text-gray-900 font-medium">Receipt scanned successfully!</p>
                   <p className="text-sm text-gray-500">Details have been extracted automatically</p>
+                  {formData.receiptUrl && (
+                    <img
+                      src={formData.receiptUrl}
+                      alt="Receipt Preview"
+                      className="mx-auto mt-2 rounded-xl shadow-md w-32 h-32 object-cover animate-zoom-in"
+                    />
+                  )}
                 </div>
               ) : (
                 <div className="space-y-4">
@@ -164,18 +170,18 @@ const AddExpense = () => {
                   onChange={handleReceiptUpload}
                   className="hidden"
                   id="camera-input"
+                  ref={cameraInputRef}
                 />
                 <Button
                   type="button"
                   variant="outline"
-                  className="w-full border-blue-600 text-blue-600 hover:bg-blue-50"
+                  className="w-full border-blue-600 text-blue-600 hover:bg-blue-50 transition-all duration-150 focus:ring-2 focus:ring-blue-200"
                   onClick={handleCameraCapture}
                 >
                   <Camera className="w-4 h-4 mr-2" />
                   Take Photo
                 </Button>
               </div>
-              
               <div className="flex-1">
                 <input
                   type="file"
@@ -183,12 +189,13 @@ const AddExpense = () => {
                   onChange={handleReceiptUpload}
                   className="hidden"
                   id="upload-input"
+                  ref={uploadInputRef}
                 />
                 <Button
                   type="button"
                   variant="outline"
-                  className="w-full border-blue-600 text-blue-600 hover:bg-blue-50"
-                  onClick={() => (document.getElementById('upload-input') as HTMLInputElement)?.click()}
+                  className="w-full border-blue-600 text-blue-600 hover:bg-blue-50 transition-all duration-150 focus:ring-2 focus:ring-blue-200"
+                  onClick={() => uploadInputRef.current?.click()}
                 >
                   <Upload className="w-4 h-4 mr-2" />
                   Upload
@@ -199,65 +206,84 @@ const AddExpense = () => {
         </Card>
 
         {/* Manual Entry Form */}
-        <Card className="p-6">
+        <Card className="p-6 glass-card rounded-2xl shadow-xl">
           <h3 className="text-lg font-semibold mb-4">Expense Details</h3>
-          <div className="space-y-4">
-            <div className="space-y-2">
-              <Label className="text-gray-700 font-medium">Amount *</Label>
-              <div className="relative">
-                <span className="absolute left-3 top-1/2 -translate-y-1/2 text-gray-500 text-lg">$</span>
-                <Input
-                  type="number"
-                  placeholder="0.00"
-                  value={formData.amount}
-                  onChange={(e) => setFormData(prev => ({ ...prev, amount: e.target.value }))}
-                  className="h-14 rounded-xl pl-8 text-lg font-semibold"
-                  step="0.01"
-                />
+          <div className="grid grid-cols-1 md:grid-cols-2 gap-x-8 gap-y-8">
+            <div className="space-y-6">
+              <div className="space-y-2">
+                <Label htmlFor="amount" className="text-gray-700 font-medium block mb-1 ml-2">Amount *</Label>
+                <div className="relative">
+                  <span className="absolute left-3 top-1/2 -translate-y-1/2 text-gray-500 text-lg">$</span>
+                  <Input
+                    id="amount"
+                    type="number"
+                    placeholder="0.00"
+                    value={formData.amount}
+                    onChange={(e) => setFormData(prev => ({ ...prev, amount: e.target.value }))}
+                    onFocus={() => setInputFocus('amount')}
+                    onBlur={() => setInputFocus(null)}
+                    className={`h-14 rounded-xl pl-8 text-lg font-semibold transition-all duration-150 ${inputFocus === 'amount' ? 'ring-2 ring-blue-300 shadow-md' : ''}`}
+                    step="0.01"
+                    aria-label="Amount"
+                  />
+                </div>
+              </div>
+              <div className="space-y-2">
+                <Label htmlFor="category" className="text-gray-700 font-medium block mb-1 ml-2">Category *</Label>
+                <Select value={formData.category} onValueChange={(value) => setFormData(prev => ({ ...prev, category: value }))}>
+                  <SelectTrigger
+                    id="category"
+                    className={`h-14 rounded-xl transition-all duration-150 ${inputFocus === 'category' ? 'ring-2 ring-blue-300 shadow-md' : ''}`}
+                    onFocus={() => setInputFocus('category')}
+                    onBlur={() => setInputFocus(null)}
+                    aria-label="Category"
+                  >
+                    <SelectValue placeholder="Select category" />
+                  </SelectTrigger>
+                  <SelectContent>
+                    {categories.map((category) => (
+                      <SelectItem key={category} value={category}>
+                        {category}
+                      </SelectItem>
+                    ))}
+                  </SelectContent>
+                </Select>
               </div>
             </div>
-
-            <div className="space-y-2">
-              <Label className="text-gray-700 font-medium">Category *</Label>
-              <Select value={formData.category} onValueChange={(value) => setFormData(prev => ({ ...prev, category: value }))}>
-                <SelectTrigger className="h-14 rounded-xl">
-                  <SelectValue placeholder="Select category" />
-                </SelectTrigger>
-                <SelectContent>
-                  {categories.map((category) => (
-                    <SelectItem key={category} value={category}>
-                      {category}
-                    </SelectItem>
-                  ))}
-                </SelectContent>
-              </Select>
-            </div>
-
-            <div className="space-y-2">
-              <Label className="text-gray-700 font-medium">Description</Label>
-              <Textarea
-                placeholder="Add a note about this expense..."
-                value={formData.description}
-                onChange={(e) => setFormData(prev => ({ ...prev, description: e.target.value }))}
-                className="rounded-xl resize-none"
-                rows={3}
-              />
-            </div>
-
-            <div className="space-y-2">
-              <Label className="text-gray-700 font-medium">Date</Label>
-              <Input
-                type="date"
-                value={formData.date}
-                onChange={(e) => setFormData(prev => ({ ...prev, date: e.target.value }))}
-                className="h-14 rounded-xl"
-              />
+            <div className="space-y-6">
+              <div className="space-y-2">
+                <Label htmlFor="description" className="text-gray-700 font-medium block mb-1 ml-2">Description</Label>
+                <Textarea
+                  id="description"
+                  placeholder="Add a note about this expense..."
+                  value={formData.description}
+                  onChange={(e) => setFormData(prev => ({ ...prev, description: e.target.value }))}
+                  onFocus={() => setInputFocus('description')}
+                  onBlur={() => setInputFocus(null)}
+                  className={`rounded-xl resize-none transition-all duration-150 ${inputFocus === 'description' ? 'ring-2 ring-blue-300 shadow-md' : ''}`}
+                  rows={3}
+                  aria-label="Description"
+                />
+              </div>
+              <div className="space-y-2">
+                <Label htmlFor="date" className="text-gray-700 font-medium block mb-1 ml-2">Date</Label>
+                <Input
+                  id="date"
+                  type="date"
+                  value={formData.date}
+                  onChange={(e) => setFormData(prev => ({ ...prev, date: e.target.value }))}
+                  onFocus={() => setInputFocus('date')}
+                  onBlur={() => setInputFocus(null)}
+                  className={`h-14 rounded-xl transition-all duration-150 ${inputFocus === 'date' ? 'ring-2 ring-blue-300 shadow-md' : ''}`}
+                  aria-label="Date"
+                />
+              </div>
             </div>
           </div>
         </Card>
 
         {/* Quick Amounts */}
-        <Card className="p-6">
+        <Card className="p-6 glass-card rounded-2xl shadow-xl">
           <h3 className="text-lg font-semibold mb-4">Quick Amounts</h3>
           <div className="grid grid-cols-3 gap-3">
             {["5", "10", "25", "50", "100", "200"].map((amount) => (
@@ -265,7 +291,7 @@ const AddExpense = () => {
                 key={amount}
                 variant="outline"
                 onClick={() => setFormData(prev => ({ ...prev, amount }))}
-                className="h-12 rounded-xl text-lg font-semibold"
+                className="h-12 rounded-xl text-lg font-semibold transition-all duration-150 hover:bg-blue-50 focus:ring-2 focus:ring-blue-200"
               >
                 ${amount}
               </Button>
@@ -273,8 +299,36 @@ const AddExpense = () => {
           </div>
         </Card>
       </div>
-
       <BottomNavigation />
+      {/* Custom Animations & Glass Styles */}
+      <style>{`
+        .glass-card {
+          background: linear-gradient(120deg, rgba(255,255,255,0.7) 0%, rgba(186,230,253,0.5) 100%);
+          backdrop-filter: blur(16px) saturate(1.1);
+        }
+        @keyframes fade-in-up {
+          from { opacity: 0; transform: translateY(32px); }
+          to { opacity: 1; transform: translateY(0); }
+        }
+        .animate-fade-in-up {
+          animation: fade-in-up 0.7s cubic-bezier(.4,2,.6,1);
+        }
+        @keyframes zoom-in {
+          from { opacity: 0; transform: scale(0.92); }
+          to { opacity: 1; transform: scale(1); }
+        }
+        .animate-zoom-in {
+          animation: zoom-in 0.4s cubic-bezier(.4,2,.6,1);
+        }
+        @keyframes pulse-on-press {
+          0% { box-shadow: 0 0 0 0 rgba(59,130,246,0.4); }
+          70% { box-shadow: 0 0 0 8px rgba(59,130,246,0); }
+          100% { box-shadow: 0 0 0 0 rgba(59,130,246,0); }
+        }
+        .animate-pulse-on-press:active {
+          animation: pulse-on-press 0.4s;
+        }
+      `}</style>
     </div>
   );
 };

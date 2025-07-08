@@ -1,5 +1,5 @@
 
-import { useState } from "react";
+import { useState, useEffect } from "react";
 import { useNavigate } from "react-router-dom";
 import { Button } from "@/components/ui/button";
 import { Card } from "@/components/ui/card";
@@ -8,6 +8,11 @@ import { Dialog, DialogContent, DialogHeader, DialogTitle, DialogTrigger } from 
 import BottomNavigation from "@/components/BottomNavigation";
 import { ArrowLeft, Plus, Edit2, Trash2 } from "lucide-react";
 import { useToast } from "@/hooks/use-toast";
+import { Tooltip } from "@/components/ui/tooltip";
+
+const categoryIcons = [
+  "🍔", "🚗", "🛍️", "💡", "🎬", "💊", "🏠", "✈️"
+];
 
 const Categories = () => {
   const navigate = useNavigate();
@@ -65,24 +70,30 @@ const Categories = () => {
     });
   };
 
+  useEffect(() => {
+    document.body.classList.add("animate-fade-slide-in");
+    return () => document.body.classList.remove("animate-fade-slide-in");
+  }, []);
+
   return (
-    <div className="min-h-screen bg-gray-50 pb-20">
-      {/* Header */}
-      <div className="bg-white px-4 py-4 border-b border-gray-100">
-        <div className="flex items-center justify-between">
+    <div className="min-h-screen bg-gradient-to-br from-blue-100/60 to-blue-200/80 pb-24 flex flex-col items-center animate-fade-slide-up">
+      <div className="w-full max-w-3xl px-4 sm:px-0 py-10">
+        {/* Header */}
+        <div className="flex items-center justify-between mb-8 animate-stagger-in" style={{animationDelay:'100ms'}}>
           <Button
             variant="ghost"
-            size="sm"
+            size="icon"
             onClick={() => navigate(-1)}
-            className="text-gray-600"
+            className="rounded-full bg-white/70 hover:bg-blue-100 shadow-md border border-blue-200 transition-all duration-200"
+            aria-label="Back"
           >
-            <ArrowLeft className="w-5 h-5" />
+            <ArrowLeft className="w-6 h-6 text-blue-600" />
           </Button>
-          <h1 className="text-lg font-semibold">Categories</h1>
+          <h1 className="text-2xl font-bold text-blue-800 ml-2 tracking-tight flex-1">Categories</h1>
           <Dialog open={isDialogOpen} onOpenChange={setIsDialogOpen}>
             <DialogTrigger asChild>
-              <Button size="sm" className="bg-blue-600 hover:bg-blue-700 text-white">
-                <Plus className="w-4 h-4" />
+              <Button size="icon" className="bg-blue-600 hover:bg-blue-700 text-white shadow-lg animate-ripple rounded-full w-12 h-12 flex items-center justify-center">
+                <Plus className="w-6 h-6" />
               </Button>
             </DialogTrigger>
             <DialogContent className="sm:max-w-md">
@@ -98,7 +109,6 @@ const Categories = () => {
                     onChange={(e) => setNewCategory(prev => ({ ...prev, name: e.target.value }))}
                   />
                 </div>
-                
                 <div className="space-y-2">
                   <label className="text-sm font-medium">Monthly Budget</label>
                   <Input
@@ -108,22 +118,20 @@ const Categories = () => {
                     onChange={(e) => setNewCategory(prev => ({ ...prev, budget: e.target.value }))}
                   />
                 </div>
-                
                 <div className="space-y-2">
                   <label className="text-sm font-medium">Color</label>
                   <div className="flex space-x-2">
-                    {colors.map((color) => (
+                    {colors.map((color, i) => (
                       <button
                         key={color}
                         onClick={() => setNewCategory(prev => ({ ...prev, color }))}
-                        className={`w-8 h-8 rounded-full ${color} ${
-                          newCategory.color === color ? "ring-2 ring-gray-400" : ""
-                        }`}
-                      />
+                        className={`w-8 h-8 rounded-full ${color} ${newCategory.color === color ? "ring-2 ring-gray-400" : ""}`}
+                      >
+                        <span className="text-lg">{categoryIcons[i % categoryIcons.length]}</span>
+                      </button>
                     ))}
                   </div>
                 </div>
-                
                 <Button onClick={handleAddCategory} className="w-full">
                   Add Category
                 </Button>
@@ -131,59 +139,45 @@ const Categories = () => {
             </DialogContent>
           </Dialog>
         </div>
+        {/* Category Grid */}
+        <div className="grid grid-cols-1 sm:grid-cols-2 md:grid-cols-3 gap-8 animate-stagger-in" style={{animationDelay:'200ms'}}>
+          {categories.map((category, i) => (
+            <Card
+              key={category.id}
+              className={`relative p-8 rounded-2xl glass-card shadow-xl cursor-pointer transition-all duration-200 animate-stagger-in hover:scale-[1.04] hover:shadow-2xl group`} 
+              style={{animationDelay:`${250+i*80}ms`} }
+              onClick={() => navigate('/category-details', { state: { category, month: 'February' } })}
+              tabIndex={0}
+              aria-label={category.name}
+            >
+              <div className="flex flex-col items-center gap-4">
+                <div className={`w-16 h-16 rounded-full flex items-center justify-center text-3xl ${category.color} shadow-lg mb-2 group-hover:scale-110 transition-transform duration-200`}>{categoryIcons[i % categoryIcons.length]}</div>
+                <div className="font-bold text-blue-900 text-lg mb-1">{category.name}</div>
+                <div className="text-blue-500 text-md mb-2">${category.spent} spent</div>
+                <div className="w-full bg-blue-100/60 rounded-full h-2 mb-2">
+                  <div
+                    className={`h-2 rounded-full ${category.color}`}
+                    style={{ width: `${Math.min((category.spent / category.budget) * 100, 100)}%` }}
+                  ></div>
+                </div>
+                <div className="flex justify-between w-full text-xs">
+                  <span className={`font-medium ${category.spent > category.budget ? "text-red-600" : "text-gray-600"}`}>{((category.spent / category.budget) * 100).toFixed(1)}% used</span>
+                  <span className="text-gray-500">${category.budget - category.spent} left</span>
+                </div>
+              </div>
+            </Card>
+          ))}
+        </div>
       </div>
-
-      <div className="px-4 py-6 space-y-4">
-        {categories.map((category) => (
-          <Card key={category.id} className="p-4">
-            <div className="flex items-center justify-between mb-3">
-              <div className="flex items-center space-x-3">
-                <div className={`w-4 h-4 rounded-full ${category.color}`}></div>
-                <h3 className="font-semibold text-gray-900">{category.name}</h3>
-              </div>
-              <div className="flex items-center space-x-2">
-                <Button variant="ghost" size="sm" className="text-gray-500">
-                  <Edit2 className="w-4 h-4" />
-                </Button>
-                <Button
-                  variant="ghost"
-                  size="sm"
-                  onClick={() => handleDeleteCategory(category.id)}
-                  className="text-red-500 hover:text-red-600"
-                >
-                  <Trash2 className="w-4 h-4" />
-                </Button>
-              </div>
-            </div>
-            
-            <div className="space-y-2">
-              <div className="flex justify-between text-sm">
-                <span className="text-gray-600">Spent: ${category.spent}</span>
-                <span className="text-gray-600">Budget: ${category.budget}</span>
-              </div>
-              
-              <div className="w-full bg-gray-200 rounded-full h-2">
-                <div
-                  className={`h-2 rounded-full ${category.color}`}
-                  style={{ width: `${Math.min((category.spent / category.budget) * 100, 100)}%` }}
-                ></div>
-              </div>
-              
-              <div className="flex justify-between text-xs">
-                <span className={`font-medium ${
-                  category.spent > category.budget ? "text-red-600" : "text-gray-600"
-                }`}>
-                  {((category.spent / category.budget) * 100).toFixed(1)}% used
-                </span>
-                <span className="text-gray-500">
-                  ${category.budget - category.spent} remaining
-                </span>
-              </div>
-            </div>
-          </Card>
-        ))}
-      </div>
-
+      {/* Floating Add Button */}
+      <Button
+        size="icon"
+        className="fixed bottom-24 right-8 z-30 bg-blue-600 hover:bg-blue-700 text-white shadow-2xl rounded-full w-16 h-16 flex items-center justify-center animate-ripple"
+        onClick={() => setIsDialogOpen(true)}
+        aria-label="Add Category"
+      >
+        <Plus className="w-8 h-8" />
+      </Button>
       <BottomNavigation />
     </div>
   );
