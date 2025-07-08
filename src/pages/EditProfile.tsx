@@ -1,5 +1,5 @@
 
-import { useState } from "react";
+import { useState, useEffect } from "react";
 import { useNavigate } from "react-router-dom";
 import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
@@ -8,20 +8,34 @@ import { Card } from "@/components/ui/card";
 import { Avatar, AvatarImage, AvatarFallback } from "@/components/ui/avatar";
 import { ArrowLeft, Camera, CheckCircle, XCircle } from "lucide-react";
 import { useToast } from "@/hooks/use-toast";
+import { authService } from "@/services/authService";
 
 const EditProfile = () => {
   const navigate = useNavigate();
   const { toast } = useToast();
   const [formData, setFormData] = useState({
-    firstName: "John",
-    lastName: "Doe",
-    email: "john.doe@example.com",
-    phone: "+1 234 567 8900",
-    dateOfBirth: "1990-01-01",
-    address: "123 Main Street, City, State 12345"
+    firstName: "",
+    lastName: "",
+    email: "",
+    phone: "",
+    dateOfBirth: "",
+    address: ""
   });
   const [touched, setTouched] = useState<{[key:string]:boolean}>({});
   const [valid, setValid] = useState<{[key:string]:boolean}>({});
+
+  useEffect(() => {
+    authService.getCurrentUser().then(user => {
+      setFormData({
+        firstName: user.first_name || "",
+        lastName: user.last_name || "",
+        email: user.email || "",
+        phone: user.phone_number || "",
+        dateOfBirth: user.date_of_birth || "",
+        address: user.address || ""
+      });
+    });
+  }, []);
 
   const validate = (field:string, value:string) => {
     switch(field) {
@@ -40,12 +54,22 @@ const EditProfile = () => {
     setValid(prev => ({ ...prev, [field]: validate(field, value) }));
   };
 
-  const handleSave = () => {
-    toast({
-      title: "Profile Updated",
-      description: "Your profile has been updated successfully.",
-    });
-    navigate("/profile");
+  const handleSave = async () => {
+    try {
+      // Add update user API call here if available
+      // await authService.updateUser(formData);
+      toast({
+        title: "Profile Updated",
+        description: "Your profile has been updated successfully.",
+      });
+      navigate("/profile");
+    } catch (error) {
+      toast({
+        title: "Error",
+        description: "Failed to update profile. Please try again.",
+        variant: "destructive",
+      });
+    }
   };
 
   return (

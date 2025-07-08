@@ -8,11 +8,13 @@ export const authService = {
       email,
       password,
     });
-    
+    console.log('LOGIN RESPONSE', response);
     if (response.authToken) {
       tokenManager.setToken(response.authToken);
+      console.log('TOKEN SET', response.authToken);
+    } else {
+      console.log('NO TOKEN IN LOGIN RESPONSE');
     }
-    
     return response;
   },
 
@@ -22,16 +24,20 @@ export const authService = {
       email,
       password,
     });
-    
+    console.log('SIGNUP RESPONSE', response);
     if (response.authToken) {
       tokenManager.setToken(response.authToken);
+      console.log('TOKEN SET', response.authToken);
+    } else {
+      console.log('NO TOKEN IN SIGNUP RESPONSE');
     }
-    
     return response;
   },
 
   async getCurrentUser(): Promise<User> {
-    return authApi.get<User>('auth/me');
+    const user = await authApi.get<User>('auth/me');
+    console.log('GET CURRENT USER RESPONSE', user);
+    return user;
   },
 
   logout(): void {

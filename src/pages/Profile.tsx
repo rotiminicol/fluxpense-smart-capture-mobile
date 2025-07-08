@@ -1,5 +1,5 @@
 
-import { useState, useRef } from "react";
+import { useEffect, useState, useRef } from "react";
 import { useNavigate } from "react-router-dom";
 import { Button } from "@/components/ui/button";
 import { Card } from "@/components/ui/card";
@@ -17,26 +17,28 @@ import {
   Camera,
   Upload
 } from "lucide-react";
+import { useAuth } from "@/hooks/useAuth";
+import { transactionService } from "@/services/transactionService";
 
 const Profile = () => {
   const navigate = useNavigate();
-  const [user, setUser] = useState({
-    name: "John Doe",
-    email: "john.doe@example.com",
-    avatar: "",
-    memberSince: "January 2024"
-  });
+  const { user } = useAuth();
   const [editing, setEditing] = useState(false);
   const [formData, setFormData] = useState({
-    name: user.name,
-    email: user.email,
-    phone: "",
+    name: user?.name || "",
+    email: user?.email || "",
+    phone: user?.phone_number || "",
   });
-  const [avatarUrl, setAvatarUrl] = useState(user.avatar);
+  const [avatarUrl, setAvatarUrl] = useState(user?.profile_picture || "");
   const [showSuccess, setShowSuccess] = useState(false);
   const [inputFocus, setInputFocus] = useState<string | null>(null);
   const cameraInputRef = useRef<HTMLInputElement>(null);
   const uploadInputRef = useRef<HTMLInputElement>(null);
+  const [transactions, setTransactions] = useState<any[]>([]);
+
+  useEffect(() => {
+    transactionService.getTransactions().then(data => setTransactions(data));
+  }, []);
 
   const menuItems = [
     { icon: User, label: "Edit Profile", path: "/profile/edit" },
@@ -62,7 +64,8 @@ const Profile = () => {
   };
 
   const handleSave = () => {
-    setUser({ ...user, name: formData.name, email: formData.email, avatar: avatarUrl });
+    // This function will be implemented later to update user data
+    console.log("Saving changes:", formData);
     setShowSuccess(true);
     setTimeout(() => setShowSuccess(false), 1500);
     setEditing(false);
@@ -77,7 +80,7 @@ const Profile = () => {
             <Avatar className="w-28 h-28 border-4 border-white shadow-xl">
               <AvatarImage src={avatarUrl} />
               <AvatarFallback className="bg-white text-blue-600 text-2xl font-bold">
-                {user.name.charAt(0)}
+                {user?.name?.charAt(0) || ""}
               </AvatarFallback>
             </Avatar>
             <input
@@ -106,9 +109,11 @@ const Profile = () => {
               />
             )}
           </div>
-          <h1 className="text-2xl font-bold text-white mb-1 animate-profile-section" style={{ animationDelay: '300ms' }}>{user.name}</h1>
-          <p className="text-blue-100 mb-2 animate-profile-section" style={{ animationDelay: '350ms' }}>{user.email}</p>
-          <p className="text-blue-200 text-sm animate-profile-section" style={{ animationDelay: '400ms' }}>Member since {user.memberSince}</p>
+          <h1 className="text-2xl font-bold text-white mb-1 animate-profile-section" style={{ animationDelay: '300ms' }}>{user?.name || ""}</h1>
+          <p className="text-blue-100 mb-2 animate-profile-section" style={{ animationDelay: '350ms' }}>{user?.email || ""}</p>
+          <p className="text-blue-200 text-sm animate-profile-section" style={{ animationDelay: '400ms' }}>
+            Member since {transactions.length > 0 ? new Date(transactions[transactions.length - 1].created_at).toLocaleDateString() : (user?.created_at ? new Date(user.created_at).toLocaleDateString() : "")}
+          </p>
         </div>
       </div>
       <div className="px-4 py-6 space-y-6">
@@ -188,12 +193,12 @@ const Profile = () => {
         {/* Stats Cards */}
         <div className="grid grid-cols-2 gap-4 animate-profile-section" style={{ animationDelay: '700ms' }}>
           <Card className="p-4 text-center glass-card rounded-2xl shadow-xl">
-            <div className="text-2xl font-bold text-gray-900 mb-1">127</div>
+            <div className="text-2xl font-bold text-gray-900 mb-1">{transactions.length}</div>
             <div className="text-sm text-gray-600">Transactions</div>
           </Card>
           <Card className="p-4 text-center glass-card rounded-2xl shadow-xl">
-            <div className="text-2xl font-bold text-gray-900 mb-1">$2,840</div>
-            <div className="text-sm text-gray-600">This Month</div>
+            <div className="text-2xl font-bold text-gray-900 mb-1">{transactions[0]?.created_at ? new Date(transactions[0].created_at).toLocaleDateString() : "-"}</div>
+            <div className="text-sm text-gray-600">First Transaction</div>
           </Card>
         </div>
         {/* Menu Items */}

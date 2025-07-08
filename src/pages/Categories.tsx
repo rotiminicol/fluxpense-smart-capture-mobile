@@ -9,6 +9,7 @@ import BottomNavigation from "@/components/BottomNavigation";
 import { ArrowLeft, Plus, Edit2, Trash2 } from "lucide-react";
 import { useToast } from "@/hooks/use-toast";
 import { Tooltip } from "@/components/ui/tooltip";
+import { categoryService } from "@/services/categoryService";
 
 const categoryIcons = [
   "🍔", "🚗", "🛍️", "💡", "🎬", "💊", "🏠", "✈️"
@@ -17,14 +18,7 @@ const categoryIcons = [
 const Categories = () => {
   const navigate = useNavigate();
   const { toast } = useToast();
-  const [categories, setCategories] = useState([
-    { id: 1, name: "Food & Dining", color: "bg-blue-500", budget: 500, spent: 320 },
-    { id: 2, name: "Transportation", color: "bg-purple-500", budget: 300, spent: 180 },
-    { id: 3, name: "Shopping", color: "bg-pink-500", budget: 400, spent: 245 },
-    { id: 4, name: "Bills & Utilities", color: "bg-orange-500", budget: 800, spent: 680 },
-    { id: 5, name: "Entertainment", color: "bg-green-500", budget: 200, spent: 120 },
-    { id: 6, name: "Healthcare", color: "bg-red-500", budget: 150, spent: 85 },
-  ]);
+  const [categories, setCategories] = useState<any[]>([]);
   
   const [newCategory, setNewCategory] = useState({ name: "", budget: "", color: "bg-blue-500" });
   const [isDialogOpen, setIsDialogOpen] = useState(false);
@@ -34,7 +28,7 @@ const Categories = () => {
     "bg-green-500", "bg-red-500", "bg-yellow-500", "bg-indigo-500"
   ];
 
-  const handleAddCategory = () => {
+  const handleAddCategory = async () => {
     if (!newCategory.name || !newCategory.budget) {
       toast({
         title: "Missing Information",
@@ -43,32 +37,48 @@ const Categories = () => {
       });
       return;
     }
-
-    const category = {
-      id: Date.now(),
-      name: newCategory.name,
-      color: newCategory.color,
-      budget: parseInt(newCategory.budget),
-      spent: 0,
-    };
-
-    setCategories(prev => [...prev, category]);
-    setNewCategory({ name: "", budget: "", color: "bg-blue-500" });
-    setIsDialogOpen(false);
-    
-    toast({
-      title: "Category Added!",
-      description: `${category.name} has been created successfully.`,
-    });
+    try {
+      const category = await categoryService.createCategory({
+        name: newCategory.name,
+        color: newCategory.color,
+        budget_limit: parseInt(newCategory.budget),
+      });
+      setCategories(prev => [...prev, category]);
+      setNewCategory({ name: "", budget: "", color: "bg-blue-500" });
+      setIsDialogOpen(false);
+      toast({
+        title: "Category Added!",
+        description: `${category.name} has been created successfully.`,
+      });
+    } catch (error) {
+      toast({
+        title: "Error",
+        description: "Failed to add category. Please try again.",
+        variant: "destructive",
+      });
+    }
   };
 
-  const handleDeleteCategory = (id: number) => {
-    setCategories(prev => prev.filter(cat => cat.id !== id));
-    toast({
-      title: "Category Deleted",
-      description: "Category has been removed successfully.",
-    });
+  const handleDeleteCategory = async (id: number) => {
+    try {
+      await categoryService.deleteCategory(id);
+      setCategories(prev => prev.filter(cat => cat.id !== id));
+      toast({
+        title: "Category Deleted",
+        description: "Category has been removed successfully.",
+      });
+    } catch (error) {
+      toast({
+        title: "Error",
+        description: "Failed to delete category. Please try again.",
+        variant: "destructive",
+      });
+    }
   };
+
+  useEffect(() => {
+    categoryService.getCategories().then(setCategories);
+  }, []);
 
   useEffect(() => {
     document.body.classList.add("animate-fade-slide-in");

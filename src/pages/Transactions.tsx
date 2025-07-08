@@ -1,12 +1,13 @@
 
-import { useState } from "react";
+import { useState, useEffect } from "react";
 import { useNavigate } from "react-router-dom";
 import { Button } from "@/components/ui/button";
 import { Card } from "@/components/ui/card";
 import { Input } from "@/components/ui/input";
 import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from "@/components/ui/select";
 import { ArrowLeft, Search, Filter, TrendingUp, TrendingDown } from "lucide-react";
-import { useEffect } from "react";
+import { transactionService } from "@/services/transactionService";
+import { categoryService } from "@/services/categoryService";
 import { BadgeCheck, BadgeAlert } from "lucide-react";
 
 type Transaction = {
@@ -25,22 +26,15 @@ const Transactions = () => {
   const [searchTerm, setSearchTerm] = useState("");
   const [filterCategory, setFilterCategory] = useState("all");
   const [activeGroup, setActiveGroup] = useState<string | null>(null);
+  const [allTransactions, setAllTransactions] = useState<any[]>([]);
+  const [categories, setCategories] = useState<string[]>([]);
 
   useEffect(() => {
+    transactionService.getTransactions().then(setAllTransactions);
+    categoryService.getCategories().then(cats => setCategories(["all", ...cats.map((c: any) => c.name)]));
     document.body.classList.add("animate-fade-slide-in");
     return () => document.body.classList.remove("animate-fade-slide-in");
   }, []);
-
-  const allTransactions = [
-    { id: 1, title: "Grocery Shopping", category: "Food", amount: -85.50, date: "Today", time: "2:30 PM", location: "Walmart", status: "Completed" },
-    { id: 2, title: "Salary Deposit", category: "Income", amount: 3500.00, date: "Yesterday", time: "9:00 AM", location: "Direct Deposit", status: "Completed" },
-    { id: 3, title: "Gas Station", category: "Transport", amount: -45.20, date: "2 days ago", time: "6:15 PM", location: "Shell", status: "Completed" },
-    { id: 4, title: "Coffee Shop", category: "Food", amount: -12.80, date: "3 days ago", time: "8:30 AM", location: "Starbucks", status: "Pending" },
-    { id: 5, title: "Online Shopping", category: "Shopping", amount: -156.99, date: "4 days ago", time: "3:45 PM", location: "Amazon", status: "Completed" },
-    { id: 6, title: "Restaurant", category: "Food", amount: -42.30, date: "5 days ago", time: "7:20 PM", location: "Local Restaurant", status: "Failed" },
-  ];
-
-  const categories = ["all", "Food", "Transport", "Shopping", "Entertainment", "Bills", "Income"];
 
   const filteredTransactions = allTransactions.filter(transaction => {
     const matchesSearch = transaction.title.toLowerCase().includes(searchTerm.toLowerCase());

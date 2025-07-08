@@ -1,11 +1,10 @@
 
-import { useState } from "react";
+import { useState, useEffect, useRef } from "react";
 import { useNavigate } from "react-router-dom";
 import { Button } from "@/components/ui/button";
 import { Card } from "@/components/ui/card";
-import { useRef } from "react";
 import { CreditCard, ArrowLeft, Plus, Settings, Lock, XCircle, CheckCircle } from "lucide-react";
-import { useEffect } from "react";
+import { paymentMethodService } from "@/services/paymentMethodService";
 
 const cardLogos = {
   Visa: <CreditCard className="w-8 h-8 text-blue-600" />,
@@ -13,26 +12,9 @@ const cardLogos = {
   Default: <CreditCard className="w-8 h-8 text-blue-400" />,
 };
 
-const initialMethods = [
-  {
-    id: 1,
-    type: "Visa",
-    number: "**** 1234",
-    expiry: "12/25",
-    isPrimary: true,
-  },
-  {
-    id: 2,
-    type: "Mastercard",
-    number: "**** 5678",
-    expiry: "08/26",
-    isPrimary: false,
-  },
-];
-
 const PaymentMethods = () => {
   const navigate = useNavigate();
-  const [paymentMethods, setPaymentMethods] = useState(initialMethods);
+  const [paymentMethods, setPaymentMethods] = useState<any[]>([]);
   const [showAdd, setShowAdd] = useState(false);
   const [adding, setAdding] = useState(false);
   const [form, setForm] = useState({
@@ -46,6 +28,7 @@ const PaymentMethods = () => {
   const addRef = useRef<HTMLDivElement>(null);
 
   useEffect(() => {
+    paymentMethodService.getPaymentMethods().then(setPaymentMethods);
     document.body.classList.add("animate-fade-slide-in");
     return () => document.body.classList.remove("animate-fade-slide-in");
   }, []);
@@ -69,28 +52,28 @@ const PaymentMethods = () => {
     setValid(v => ({ ...v, [field]: validate(field, value) }));
   };
 
-  const handleAdd = () => {
+  const handleAdd = async () => {
     setAdding(true);
-    setTimeout(() => {
-      setPaymentMethods(methods => [
-        {
-          id: Date.now(),
-          type: form.type,
-          number: `**** ${form.number.slice(-4)}`,
-          expiry: form.expiry,
-          isPrimary: paymentMethods.length === 0,
-        },
-        ...methods,
-      ]);
+    try {
+      const newMethod = await paymentMethodService.createPaymentMethod({
+        type: form.type,
+        name: form.type,
+        last_four_digits: form.number.slice(-4),
+        is_default: paymentMethods.length === 0,
+        is_active: true,
+      });
+      setPaymentMethods(methods => [newMethod, ...methods]);
       setShowAdd(false);
-      setAdding(false);
       setForm({ type: "Visa", number: "", expiry: "", cvc: "" });
       setTouched({ number: false, expiry: false, cvc: false });
       setValid({ number: false, expiry: false, cvc: false });
-    }, 800);
+    } finally {
+      setAdding(false);
+    }
   };
 
-  const handleDelete = (id: number) => {
+  const handleDelete = async (id: number) => {
+    await paymentMethodService.deletePaymentMethod(id);
     setPaymentMethods(methods => methods.filter(m => m.id !== id));
   };
 
@@ -136,7 +119,7 @@ const PaymentMethods = () => {
             {paymentMethods.map((method, i) => (
               <Card
                 key={method.id}
-                className={`relative p-8 rounded-3xl glass-card shadow-xl transition-all duration-300 animate-stagger-in ${method.isPrimary ? 'ring-4 ring-blue-400/30 border-blue-200' : 'border-transparent'} hover:scale-[1.025] hover:shadow-2xl`}
+                className={`relative p-8 rounded-3xl glass-card shadow-xl transition-all duration-300 animate-stagger-in ${method.is_default ? 'ring-4 ring-blue-400/30 border-blue-200' : 'border-transparent'} hover:scale-[1.025] hover:shadow-2xl`}
                 style={{ animationDelay: `${200 + i * 80}ms` }}
               >
                 <div className="flex items-center gap-6 mb-4">
@@ -144,10 +127,10 @@ const PaymentMethods = () => {
                     {cardLogos[method.type as keyof typeof cardLogos] || cardLogos.Default}
                 </div>
                   <div className="flex-1">
-                    <div className="text-xl font-bold text-blue-900 tracking-wider mb-1">{method.type} <span className="ml-2 text-lg font-mono">{method.number}</span></div>
+                    <div className="text-xl font-bold text-blue-900 tracking-wider mb-1">{method.name} <span className="ml-2 text-lg font-mono">{method.last_four_digits}</span></div>
                     <div className="text-base text-blue-600 font-medium">Exp: {method.expiry}</div>
                   </div>
-                  {method.isPrimary && (
+                  {method.is_default && (
                     <span className="absolute top-4 right-4 bg-blue-600 text-white text-xs font-bold px-3 py-1 rounded-full shadow">Primary</span>
                   )}
                 </div>
@@ -159,10 +142,10 @@ const PaymentMethods = () => {
                   >
                     Delete
                   </Button>
-                  {!method.isPrimary && (
+                  {!method.is_default && (
                     <Button
                       className="flex-1 h-12 rounded-xl bg-blue-600 hover:bg-blue-700 text-white font-bold text-base shadow transition-all duration-150 animate-glow-on-press"
-                      onClick={() => setPaymentMethods(methods => methods.map(m => m.id === method.id ? { ...m, isPrimary: true } : { ...m, isPrimary: false }))}
+                      onClick={() => setPaymentMethods(methods => methods.map(m => m.id === method.id ? { ...m, is_default: true } : { ...m, is_default: false }))}
                     >
                       Set as Primary
               </Button>

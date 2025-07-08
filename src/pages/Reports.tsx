@@ -1,9 +1,10 @@
 
-import { useState } from "react";
+import { useEffect, useState } from "react";
 import { Card } from "@/components/ui/card";
 import { Button } from "@/components/ui/button";
 import BottomNavigation from "@/components/BottomNavigation";
 import { Calendar, TrendingUp, TrendingDown, DollarSign, PieChart } from "lucide-react";
+import { reportService } from "@/services/reportService";
 
 const Reports = () => {
   const [selectedPeriod, setSelectedPeriod] = useState("month");
@@ -12,29 +13,15 @@ const Reports = () => {
     { key: "month", label: "Month" },
     { key: "year", label: "Year" },
   ];
-  const summaryStats = [
-    { title: "Total Income", amount: "$4,250.00", change: "+12.5%", isPositive: true, icon: TrendingUp },
-    { title: "Total Expenses", amount: "$2,840.50", change: "-8.2%", isPositive: true, icon: TrendingDown },
-    { title: "Net Savings", amount: "$1,409.50", change: "+18.3%", isPositive: true, icon: DollarSign },
-  ];
-  const expensesByCategory = [
-    { category: "Food & Dining", amount: 680, percentage: 24, color: "bg-blue-500" },
-    { category: "Transportation", amount: 420, percentage: 15, color: "bg-purple-500" },
-    { category: "Shopping", amount: 350, percentage: 12, color: "bg-pink-500" },
-    { category: "Bills & Utilities", amount: 580, percentage: 20, color: "bg-orange-500" },
-    { category: "Entertainment", amount: 280, percentage: 10, color: "bg-green-500" },
-    { category: "Healthcare", amount: 240, percentage: 8, color: "bg-red-500" },
-    { category: "Other", amount: 290, percentage: 11, color: "bg-gray-500" },
-  ];
-  const monthlyTrend = [
-    { month: "Oct", income: 3800, expenses: 2200 },
-    { month: "Nov", income: 4100, expenses: 2600 },
-    { month: "Dec", income: 3900, expenses: 2400 },
-    { month: "Jan", income: 4200, expenses: 2800 },
-    { month: "Feb", income: 4250, expenses: 2840 },
-  ];
-  // Simulate empty state for demonstration (set to true to see empty state)
-  const isEmpty = false;
+  const [reports, setReports] = useState<any[]>([]);
+  const [isEmpty, setIsEmpty] = useState(false);
+
+  useEffect(() => {
+    reportService.getReports().then(data => {
+      setReports(data);
+      setIsEmpty(!data || data.length === 0);
+    });
+  }, []);
 
   return (
     <div className="min-h-screen bg-gray-50 pb-20 animate-reports-fade-in">
@@ -85,7 +72,7 @@ const Reports = () => {
           <>
             {/* Summary Cards */}
             <div className="grid grid-cols-1 gap-4">
-              {summaryStats.map((stat, idx) => {
+              {reports.map((stat, idx) => {
                 const Icon = stat.icon;
                 return (
                   <Card
@@ -116,7 +103,7 @@ const Reports = () => {
                 <PieChart className="w-5 h-5 text-gray-400" />
               </div>
               <div className="space-y-4">
-                {expensesByCategory.map((item, idx) => (
+                {reports.map((item, idx) => (
                   <div key={item.category} className="space-y-2 animate-bar-grow" style={{ animationDelay: `${idx * 80 + 700}ms` }}>
                     <div className="flex items-center justify-between">
                       <div className="flex items-center space-x-3">
@@ -142,7 +129,7 @@ const Reports = () => {
             <Card className="p-6 glass-card rounded-2xl shadow-xl transition-all duration-200 hover:scale-[1.02] hover:shadow-2xl animate-staggered-section" style={{ animationDelay: '900ms' }}>
               <h3 className="text-lg font-semibold text-gray-900 mb-4">Monthly Trend</h3>
               <div className="space-y-4">
-                {monthlyTrend.map((month, idx) => (
+                {reports.map((month, idx) => (
                   <div key={month.month} className="space-y-2 animate-bar-grow" style={{ animationDelay: `${idx * 80 + 1000}ms` }}>
                     <div className="flex items-center justify-between">
                       <span className="text-gray-700 font-medium">{month.month}</span>

@@ -1,5 +1,5 @@
 
-import { useState } from "react";
+import { useState, useEffect } from "react";
 import { useNavigate } from "react-router-dom";
 import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
@@ -13,6 +13,8 @@ import { useToast } from "@/hooks/use-toast";
 import { motion } from "framer-motion";
 import { Info, Camera } from "lucide-react";
 import { Tooltip } from "@/components/ui/tooltip";
+import { transactionService } from "@/services/transactionService";
+import { categoryService } from "@/services/categoryService";
 
 const AddIncome = () => {
   const navigate = useNavigate();
@@ -24,19 +26,25 @@ const AddIncome = () => {
     date: new Date().toISOString().split('T')[0],
   });
   const [loading, setLoading] = useState(false);
+  const [incomeSources, setIncomeSources] = useState<string[]>([]);
 
-  const incomeSources = [
-    "Salary",
-    "Freelance",
-    "Business",
-    "Investment",
-    "Gift",
-    "Bonus",
-    "Refund",
-    "Other"
-  ];
+  useEffect(() => {
+    // Try to fetch income sources from backend (as categories of type 'income' or similar)
+    categoryService.getCategories().then(categories => {
+      // If categories have a type or can be filtered for income sources, do so
+      // Otherwise, fallback to all categories or a static list
+      const sources = categories
+        .filter((cat: any) => cat.type === 'income' || cat.is_income_source)
+        .map((cat: any) => cat.name);
+      setIncomeSources(sources.length ? sources : [
+        "Salary", "Freelance", "Business", "Investment", "Gift", "Bonus", "Refund", "Other"
+      ]);
+    }).catch(() => {
+      setIncomeSources(["Salary", "Freelance", "Business", "Investment", "Gift", "Bonus", "Refund", "Other"]);
+    });
+  }, []);
 
-  const handleSave = () => {
+  const handleSave = async () => {
     if (!formData.amount || !formData.source) {
       toast({
         title: "Missing Information",
@@ -46,14 +54,29 @@ const AddIncome = () => {
       return;
     }
     setLoading(true);
-    setTimeout(() => {
-      setLoading(false);
+    try {
+      await transactionService.createTransaction({
+        title: formData.source,
+        description: formData.description,
+        amount: parseFloat(formData.amount),
+        type: 'income',
+        date: formData.date,
+        // Add more fields as needed (category_id, etc.)
+      });
       toast({
         title: "Income Added!",
         description: `$${formData.amount} income saved successfully.`,
       });
       navigate("/dashboard");
-    }, 1000);
+    } catch (error) {
+      toast({
+        title: "Error",
+        description: "Failed to add income. Please try again.",
+        variant: "destructive",
+      });
+    } finally {
+      setLoading(false);
+    }
   };
 
   return (

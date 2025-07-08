@@ -21,6 +21,9 @@ const Dashboard = () => {
   const { toast } = useToast();
   const [selectedMonth, setSelectedMonth] = useState("February");
 
+  // Debug log for user object
+  console.log("USER FROM useAuth", user);
+
   // Fetch transactions
   const { data: transactions = [], isLoading: transactionsLoading } = useQuery({
     queryKey: ['transactions'],
@@ -130,7 +133,9 @@ const Dashboard = () => {
         <div className="flex items-center justify-between mb-6">
           <div>
             <h1 className="text-2xl font-bold text-gray-900">Welcome back!</h1>
-            <p className="text-gray-600">{user?.name || 'User'}</p>
+            <p className="text-gray-600">
+              {user?.email || user?.name || (user ? JSON.stringify(user) : 'User')}
+            </p>
           </div>
           <div className="flex items-center space-x-4">
             <Popover>
