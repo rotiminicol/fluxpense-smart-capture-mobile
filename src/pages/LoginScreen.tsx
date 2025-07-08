@@ -1,19 +1,17 @@
-
 import { useState, useRef, useEffect } from "react";
 import { useNavigate } from "react-router-dom";
 import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
 import { Label } from "@/components/ui/label";
 import { ArrowLeft, Eye, EyeOff } from "lucide-react";
-import { useToast } from "@/hooks/use-toast";
+import { useAuth } from "@/hooks/useAuth";
 
 const LoginScreen = () => {
   const navigate = useNavigate();
-  const { toast } = useToast();
+  const { login, loading } = useAuth();
   const [email, setEmail] = useState("");
   const [password, setPassword] = useState("");
   const [showPassword, setShowPassword] = useState(false);
-  const [isLoading, setIsLoading] = useState(false);
   const [touched, setTouched] = useState<{[k:string]: boolean}>({});
   const particlesRef = useRef<HTMLCanvasElement>(null);
 
@@ -60,23 +58,12 @@ const LoginScreen = () => {
 
   const handleLogin = async (e: React.FormEvent) => {
     e.preventDefault();
-    setIsLoading(true);
-    setTimeout(() => {
-      if (email && password) {
-        toast({
-          title: "Login Successful",
-          description: "Welcome back to Fluxpense!",
-        });
-        navigate("/dashboard");
-      } else {
-        toast({
-          title: "Login Failed",
-          description: "Please check your credentials and try again.",
-          variant: "destructive",
-        });
-      }
-      setIsLoading(false);
-    }, 1500);
+    try {
+      await login(email, password);
+      navigate("/dashboard");
+    } catch (error) {
+      // Error is handled in the useAuth hook
+    }
   };
 
   return (
@@ -163,10 +150,10 @@ const LoginScreen = () => {
             </div>
             <Button
               type="submit"
-              disabled={isLoading}
+              disabled={loading}
               className="w-full bg-blue-600 hover:bg-blue-700 active:scale-[0.98] text-white font-semibold py-7 rounded-2xl text-xl shadow-lg transition-all duration-150"
             >
-              {isLoading ? "Signing In..." : "Sign In"}
+              {loading ? "Signing In..." : "Sign In"}
             </Button>
           </form>
           <div className="mt-8 text-center">

@@ -1,4 +1,3 @@
-
 import { useState, useRef, useEffect } from "react";
 import { useNavigate } from "react-router-dom";
 import { Button } from "@/components/ui/button";
@@ -6,7 +5,7 @@ import { Input } from "@/components/ui/input";
 import { Label } from "@/components/ui/label";
 import { Checkbox } from "@/components/ui/checkbox";
 import { ArrowLeft, Eye, EyeOff } from "lucide-react";
-import { useToast } from "@/hooks/use-toast";
+import { useAuth } from "@/hooks/useAuth";
 
 const passwordRules = [
   { label: "At least 8 characters", test: (v: string) => v.length >= 8 },
@@ -19,7 +18,7 @@ const termsText = `Your Terms of Service and Privacy Policy go here.\n\nLorem ip
 
 const SignUpScreen = () => {
   const navigate = useNavigate();
-  const { toast } = useToast();
+  const { signup, loading } = useAuth();
   const [formData, setFormData] = useState({
     fullName: "",
     email: "",
@@ -29,7 +28,6 @@ const SignUpScreen = () => {
   const [showPassword, setShowPassword] = useState(false);
   const [showConfirmPassword, setShowConfirmPassword] = useState(false);
   const [agreedToTerms, setAgreedToTerms] = useState(false);
-  const [isLoading, setIsLoading] = useState(false);
   const [showTerms, setShowTerms] = useState(false);
   const [touched, setTouched] = useState<{[k:string]: boolean}>({});
   const particlesRef = useRef<HTMLCanvasElement>(null);
@@ -82,30 +80,19 @@ const SignUpScreen = () => {
   const handleSignUp = async (e: React.FormEvent) => {
     e.preventDefault();
     if (formData.password !== formData.confirmPassword) {
-      toast({
-        title: "Password Mismatch",
-        description: "Passwords don't match. Please try again.",
-        variant: "destructive",
-      });
+      // Error handling is done in useAuth
       return;
     }
     if (!agreedToTerms) {
-      toast({
-        title: "Terms Required",
-        description: "Please agree to the terms and conditions.",
-        variant: "destructive",
-      });
+      // Error handling is done in useAuth
       return;
     }
-    setIsLoading(true);
-    setTimeout(() => {
-      toast({
-        title: "Account Created!",
-        description: "Welcome to Fluxpense! Let's set up your profile.",
-      });
+    try {
+      await signup(formData.fullName, formData.email, formData.password);
       navigate("/onboarding");
-      setIsLoading(false);
-    }, 1500);
+    } catch (error) {
+      // Error is handled in the useAuth hook
+    }
   };
 
   return (
@@ -254,10 +241,10 @@ const SignUpScreen = () => {
             </div>
             <Button
               type="submit"
-              disabled={isLoading}
+              disabled={loading}
               className="w-full bg-blue-600 hover:bg-blue-700 active:scale-[0.98] text-white font-semibold py-7 rounded-2xl text-xl shadow-lg transition-all duration-150"
             >
-              {isLoading ? "Creating Account..." : "Create Account"}
+              {loading ? "Creating Account..." : "Create Account"}
             </Button>
           </form>
           <div className="mt-8 text-center">
