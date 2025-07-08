@@ -1,78 +1,146 @@
 
-import { useState } from "react";
+import { useState, useEffect } from "react";
+import { useNavigate } from "react-router-dom";
 import { Button } from "@/components/ui/button";
 import { Card } from "@/components/ui/card";
+import { Badge } from "@/components/ui/badge";
 import { Popover, PopoverContent, PopoverTrigger } from "@/components/ui/popover";
-import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from "@/components/ui/select";
 import BottomNavigation from "@/components/BottomNavigation";
-import { Bell, Plus, TrendingUp, TrendingDown, Calendar, Eye, EyeOff, User, LogOut, Settings } from "lucide-react";
-import { useNavigate } from "react-router-dom";
+import { Bell, Plus, TrendingUp, TrendingDown, DollarSign, Calendar, ChevronDown } from "lucide-react";
+import { useAuth } from "@/hooks/useAuth";
+import { transactionService } from "@/services/transactionService";
+import { categoryService } from "@/services/categoryService";
+import { notificationService } from "@/services/notificationService";
+import { Transaction, Category, Notification } from "@/types/api";
+import { useQuery } from "@tanstack/react-query";
 import { useToast } from "@/hooks/use-toast";
 
 const Dashboard = () => {
   const navigate = useNavigate();
+  const { user } = useAuth();
   const { toast } = useToast();
-  const [showBalance, setShowBalance] = useState(true);
   const [selectedMonth, setSelectedMonth] = useState("February");
-  const [profileOpen, setProfileOpen] = useState(false);
 
-  // Add a placeholder for the user's email (replace with real user context in production)
-  const userEmail = "user@email.com";
+  // Fetch transactions
+  const { data: transactions = [], isLoading: transactionsLoading } = useQuery({
+    queryKey: ['transactions'],
+    queryFn: transactionService.getTransactions,
+    enabled: !!user,
+  });
 
-  const notifications = [
-    { id: 1, title: "Budget Alert", message: "You've spent 80% of your food budget", time: "2 hours ago", unread: true },
-    { id: 2, title: "Receipt Reminder", message: "Don't forget to scan your receipts", time: "1 day ago", unread: true },
-    { id: 3, title: "Weekly Report", message: "Your weekly spending report is ready", time: "2 days ago", unread: false },
-  ];
+  // Fetch categories
+  const { data: categories = [], isLoading: categoriesLoading } = useQuery({
+    queryKey: ['categories'],
+    queryFn: categoryService.getCategories,
+    enabled: !!user,
+  });
 
-  const recentTransactions = [
-    { id: 1, title: "Grocery Shopping", category: "Food", amount: -85.50, date: "Today", time: "2:30 PM", location: "Walmart", color: "bg-red-100 text-red-600" },
-    { id: 2, title: "Salary Deposit", category: "Income", amount: 3500.00, date: "Yesterday", time: "9:00 AM", location: "Direct Deposit", color: "bg-green-100 text-green-600" },
-    { id: 3, title: "Gas Station", category: "Transport", amount: -45.20, date: "2 days ago", time: "6:15 PM", location: "Shell", color: "bg-red-100 text-red-600" },
-    { id: 4, title: "Coffee Shop", category: "Food", amount: -12.80, date: "3 days ago", time: "8:30 AM", location: "Starbucks", color: "bg-red-100 text-red-600" },
-  ];
+  // Fetch notifications
+  const { data: notifications = [], isLoading: notificationsLoading } = useQuery({
+    queryKey: ['notifications'],
+    queryFn: notificationService.getNotifications,
+    enabled: !!user,
+  });
 
-  const categories = [
-    { name: "Food", spent: 320, budget: 500, color: "bg-blue-500", transactions: 12 },
-    { name: "Transport", spent: 180, budget: 300, color: "bg-purple-500", transactions: 8 },
-    { name: "Shopping", spent: 245, budget: 400, color: "bg-pink-500", transactions: 5 },
-    { name: "Bills", spent: 680, budget: 800, color: "bg-orange-500", transactions: 4 },
-  ];
+  // Calculate summary data
+  const currentMonthTransactions = transactions.filter(t => {
+    const transactionDate = new Date(t.date);
+    const currentDate = new Date();
+    return transactionDate.getMonth() === currentDate.getMonth() && 
+           transactionDate.getFullYear() === currentDate.getFullYear();
+  });
 
-  const months = ["January", "February", "March", "April", "May", "June", "July", "August", "September", "October", "November", "December"];
+  const totalIncome = currentMonthTransactions
+    .filter(t => t.type === 'income')
+    .reduce((sum, t) => sum + t.amount, 0);
 
-  const handleTransactionClick = (transaction: typeof recentTransactions[0]) => {
-    navigate("/transaction-details", { state: { transaction } });
+  const totalExpenses = currentMonthTransactions
+    .filter(t => t.type === 'expense')
+    .reduce((sum, t) => sum + t.amount, 0);
+
+  const balance = totalIncome - totalExpenses;
+
+  // Recent transactions (last 5)
+  const recentTransactions = transactions
+    .sort((a, b) => new Date(b.created_at).getTime() - new Date(a.created_at).getTime())
+    .slice(0, 5);
+
+  // Category spending summary
+  const categorySpending = categories.map(category => {
+    const categoryTransactions = currentMonthTransactions.filter(t => t.category_id === category.id);
+    const spent = categoryTransactions.reduce((sum, t) => sum + (t.type === 'expense' ? t.amount : 0), 0);
+    
+    return {
+      ...category,
+      spent,
+      percentage: category.budget_limit > 0 ? (spent / category.budget_limit) * 100 : 0,
+    };
+  });
+
+  const unreadNotifications = notifications.filter(n => !n.is_read);
+
+  const handleNotificationClick = async (notification: Notification) => {
+    if (!notification.is_read) {
+      try {
+        await notificationService.markAsRead(notification.id);
+        // Refetch notifications to update the UI
+      } catch (error) {
+        console.error('Failed to mark notification as read:', error);
+      }
+    }
   };
 
-  const handleCategoryClick = (category: typeof categories[0]) => {
-    navigate("/category-details", { state: { category, month: selectedMonth } });
+  const handleTransactionClick = (transaction: Transaction) => {
+    const category = categories.find(c => c.id === transaction.category_id);
+    navigate("/transaction-details", { 
+      state: { 
+        transaction: {
+          ...transaction,
+          category: category?.name || 'Unknown',
+          color: category?.color || 'bg-gray-500'
+        }
+      } 
+    });
   };
 
-  const handleSignOut = () => {
-    // Clear user session (customize as needed)
-    localStorage.clear();
-    sessionStorage.clear();
-    toast({ title: "Signed out", description: "You have been signed out successfully." });
-    navigate("/welcome");
+  const handleCategoryClick = (categoryData: any) => {
+    navigate('/category-details', { 
+      state: { 
+        category: {
+          ...categoryData,
+          budget: categoryData.budget_limit || 0
+        }, 
+        month: selectedMonth 
+      } 
+    });
   };
+
+  if (transactionsLoading || categoriesLoading || notificationsLoading) {
+    return (
+      <div className="min-h-screen bg-gradient-to-br from-blue-50 to-indigo-100 flex items-center justify-center">
+        <div className="animate-spin rounded-full h-12 w-12 border-b-2 border-blue-600"></div>
+      </div>
+    );
+  }
 
   return (
-    <div className="min-h-screen bg-gray-50 pb-20 animate-fade-in">
+    <div className="min-h-screen bg-gradient-to-br from-blue-50 to-indigo-100 pb-20">
       {/* Header */}
-      <div className="bg-white/70 backdrop-blur-lg px-4 py-6 border-b border-gray-100 shadow-sm">
+      <div className="bg-white/90 backdrop-blur-lg px-6 py-6 rounded-b-3xl shadow-xl">
         <div className="flex items-center justify-between mb-6">
           <div>
-            <h1 className="text-lg font-semibold text-gray-900">Good morning!</h1>
-            <p className="text-gray-600">Welcome back, {userEmail}</p>
+            <h1 className="text-2xl font-bold text-gray-900">Welcome back!</h1>
+            <p className="text-gray-600">{user?.name || 'User'}</p>
           </div>
-          <div className="flex items-center space-x-3">
+          <div className="flex items-center space-x-4">
             <Popover>
               <PopoverTrigger asChild>
-                <Button variant="ghost" size="sm" className="text-gray-600 relative">
-                  <Bell className="w-5 h-5" />
-                  {notifications.some(n => n.unread) && (
-                    <div className="absolute -top-1 -right-1 w-3 h-3 bg-red-500 rounded-full"></div>
+                <Button variant="ghost" size="icon" className="relative">
+                  <Bell className="w-6 h-6 text-gray-600" />
+                  {unreadNotifications.length > 0 && (
+                    <Badge className="absolute -top-1 -right-1 w-5 h-5 rounded-full bg-red-500 text-white text-xs flex items-center justify-center p-0">
+                      {unreadNotifications.length}
+                    </Badge>
                   )}
                 </Button>
               </PopoverTrigger>
@@ -80,243 +148,208 @@ const Dashboard = () => {
                 <div className="p-4 border-b">
                   <h3 className="font-semibold">Notifications</h3>
                 </div>
-                <div className="max-h-80 overflow-y-auto">
-                  {notifications.map((notification) => (
-                    <div key={notification.id} className={`p-4 border-b hover:bg-gray-50 ${notification.unread ? 'bg-blue-50' : ''}`}>
-                      <div className="flex justify-between items-start mb-1">
-                        <h4 className="font-medium text-sm">{notification.title}</h4>
-                        <span className="text-xs text-gray-500">{notification.time}</span>
-                      </div>
-                      <p className="text-sm text-gray-600">{notification.message}</p>
+                <div className="max-h-64 overflow-y-auto">
+                  {notifications.length === 0 ? (
+                    <div className="p-4 text-center text-gray-500">
+                      No notifications
                     </div>
-                  ))}
+                  ) : (
+                    notifications.slice(0, 5).map((notification) => (
+                      <div
+                        key={notification.id}
+                        className={`p-4 border-b cursor-pointer hover:bg-gray-50 ${
+                          !notification.is_read ? 'bg-blue-50' : ''
+                        }`}
+                        onClick={() => handleNotificationClick(notification)}
+                      >
+                        <h4 className="font-medium text-sm">{notification.title}</h4>
+                        <p className="text-xs text-gray-600 mt-1">{notification.message}</p>
+                        <p className="text-xs text-gray-400 mt-2">
+                          {new Date(notification.created_at).toLocaleDateString()}
+                        </p>
+                      </div>
+                    ))
+                  )}
                 </div>
+                {notifications.length > 5 && (
+                  <div className="p-2 border-t">
+                    <Button
+                      variant="ghost"
+                      size="sm"
+                      className="w-full"
+                      onClick={() => navigate("/notifications")}
+                    >
+                      View All
+                    </Button>
+                  </div>
+                )}
               </PopoverContent>
             </Popover>
-            {/* Profile Avatar Dropdown */}
-            <Popover open={profileOpen} onOpenChange={setProfileOpen}>
-              <PopoverTrigger asChild>
-                <button className="w-10 h-10 rounded-full bg-gradient-to-tr from-blue-400 to-green-300 border-2 border-white shadow-lg flex items-center justify-center focus:outline-none focus:ring-2 focus:ring-blue-300 transition-all">
-                  <User className="w-6 h-6 text-white" />
-                </button>
-              </PopoverTrigger>
-              <PopoverContent className="w-48 p-0 rounded-xl shadow-2xl border-0 bg-white/90 backdrop-blur-xl animate-dropdown-fade" align="end">
-                <ul className="divide-y divide-gray-100">
-                  <li>
-                    <button className="w-full flex items-center gap-3 px-5 py-4 text-gray-800 hover:bg-blue-50 transition-all text-base" onClick={() => { setProfileOpen(false); navigate('/profile'); }}>
-                      <User className="w-5 h-5 text-blue-500" /> Profile
-                    </button>
-                  </li>
-                  <li>
-                    <button className="w-full flex items-center gap-3 px-5 py-4 text-gray-800 hover:bg-blue-50 transition-all text-base" onClick={() => { setProfileOpen(false); navigate('/settings'); }}>
-                      <Settings className="w-5 h-5 text-blue-500" /> Settings
-                    </button>
-                  </li>
-                  <li>
-                    <button className="w-full flex items-center gap-3 px-5 py-4 text-gray-800 hover:bg-blue-50 transition-all text-base" onClick={() => { setProfileOpen(false); handleSignOut(); }}>
-                      <LogOut className="w-5 h-5 text-blue-500" /> Sign Out
-                    </button>
-                  </li>
-                </ul>
-              </PopoverContent>
-            </Popover>
+            <Button
+              onClick={() => navigate("/profile")}
+              className="w-10 h-10 rounded-full bg-blue-600 text-white flex items-center justify-center"
+            >
+              {user?.name?.[0]?.toUpperCase() || 'U'}
+            </Button>
           </div>
         </div>
 
         {/* Balance Card */}
-        <div className="relative mx-auto max-w-2xl">
-          <div className="glass-balance border-2 border-blue-300/60 rounded-3xl shadow-xl p-6 flex flex-col gap-4 items-center justify-between transition-all duration-300">
-            <div className="flex items-center justify-between w-full mb-2">
-              <div>
-                <p className="text-blue-100 text-sm">Total Balance</p>
-                <div className="flex items-center space-x-2">
-                  <h2 className="text-3xl font-bold text-white">
-                    {showBalance ? "$4,250.80" : "••••••"}
-                  </h2>
-                  <Button
-                    variant="ghost"
-                    size="sm"
-                    onClick={() => setShowBalance(!showBalance)}
-                    className="text-white hover:bg-blue-800"
-                  >
-                    {showBalance ? <EyeOff className="w-4 h-4" /> : <Eye className="w-4 h-4" />}
-                  </Button>
-                </div>
-              </div>
-              <div className="flex flex-col items-end gap-2">
-                <Button
-                  onClick={() => navigate("/add-expense")}
-                  className="bg-white text-blue-600 hover:bg-blue-50 rounded-full w-12 h-12 p-0 shadow-lg border-2 border-blue-200 transition-all duration-200"
-                >
-                  <Plus className="w-6 h-6" />
-                </Button>
-              </div>
+        <Card className="p-6 bg-gradient-to-r from-blue-600 to-purple-600 text-white rounded-2xl shadow-lg">
+          <div className="flex items-center justify-between mb-4">
+            <div>
+              <p className="text-blue-100 text-sm">Total Balance</p>
+              <h2 className="text-3xl font-bold">${balance.toFixed(2)}</h2>
             </div>
-            <div className="flex items-center justify-between w-full">
-              <div className="flex items-center space-x-4">
-                <div className="flex items-center space-x-1">
-                  <TrendingUp className="w-4 h-4 text-green-300" />
-                  <span className="text-sm text-white/90">$2,840 income</span>
-                </div>
-                <div className="flex items-center space-x-1">
-                  <TrendingDown className="w-4 h-4 text-red-300" />
-                  <span className="text-sm text-white/90">$1,425 expenses</span>
-                </div>
+            <div className="text-right">
+              <p className="text-blue-100 text-sm">This Month</p>
+              <div className="flex items-center">
+                {balance >= 0 ? (
+                  <TrendingUp className="w-4 h-4 mr-1" />
+                ) : (
+                  <TrendingDown className="w-4 h-4 mr-1" />
+                )}
+                <span className="text-sm">
+                  {balance >= 0 ? '+' : ''}${Math.abs(balance).toFixed(2)}
+                </span>
               </div>
             </div>
           </div>
-        </div>
+          
+          <div className="flex justify-between">
+            <div>
+              <p className="text-blue-100 text-xs">Income</p>
+              <p className="text-lg font-semibold text-green-300">+${totalIncome.toFixed(2)}</p>
+            </div>
+            <div>
+              <p className="text-blue-100 text-xs">Expenses</p>
+              <p className="text-lg font-semibold text-red-300">-${totalExpenses.toFixed(2)}</p>
+            </div>
+          </div>
+        </Card>
       </div>
 
-      <div className="px-4 py-6 space-y-8">
+      <div className="px-6 py-6 space-y-6">
         {/* Quick Actions */}
-        <div className="flex space-x-3">
+        <div className="grid grid-cols-2 gap-4">
           <Button
             onClick={() => navigate("/add-expense")}
-            className="flex-1 bg-blue-600 hover:bg-blue-700 text-white py-5 rounded-2xl text-lg font-bold shadow-lg transition-all duration-200 active:scale-[0.98] flex items-center justify-center gap-2"
+            className="h-20 bg-red-500 hover:bg-red-600 text-white rounded-2xl flex flex-col items-center justify-center shadow-lg"
           >
-            <Plus className="w-5 h-5" />
-            Add Expense
+            <Plus className="w-6 h-6 mb-1" />
+            <span className="text-sm font-semibold">Add Expense</span>
           </Button>
           <Button
             onClick={() => navigate("/add-income")}
-            variant="outline"
-            className="flex-1 border-blue-600 text-blue-600 hover:bg-blue-50 py-5 rounded-2xl text-lg font-bold shadow-lg transition-all duration-200 active:scale-[0.98] flex items-center justify-center gap-2"
+            className="h-20 bg-green-500 hover:bg-green-600 text-white rounded-2xl flex flex-col items-center justify-center shadow-lg"
           >
-            <TrendingUp className="w-5 h-5" />
-            Add Income
+            <Plus className="w-6 h-6 mb-1" />
+            <span className="text-sm font-semibold">Add Income</span>
           </Button>
         </div>
 
-        {/* Spending Overview Table */}
-        <div className="glass-table rounded-2xl overflow-hidden shadow-xl border border-blue-100/40 backdrop-blur-xl">
-          <div className="flex items-center justify-between px-6 pt-6 pb-2">
+        {/* Spending This Month */}
+        <Card className="p-6 rounded-2xl shadow-lg">
+          <div className="flex items-center justify-between mb-4">
             <h3 className="text-lg font-semibold text-gray-900">Spending This Month</h3>
-            <Select value={selectedMonth} onValueChange={setSelectedMonth}>
-              <SelectTrigger className="w-32">
-                <Calendar className="w-4 h-4 mr-1" />
-                <SelectValue />
-              </SelectTrigger>
-              <SelectContent>
-                {months.map((month) => (
-                  <SelectItem key={month} value={month}>
-                    {month}
-                  </SelectItem>
-                ))}
-              </SelectContent>
-            </Select>
+            <Button
+              variant="ghost"
+              size="sm"
+              className="text-blue-600"
+              onClick={() => navigate("/categories")}
+            >
+              View All
+            </Button>
           </div>
-          <table className="w-full text-left animate-table-fade">
-            <tbody>
-              {categories.map((category, idx) => (
-                <tr
-                  key={category.name}
-                  className="group transition-all duration-200 hover:bg-blue-50/40 cursor-pointer"
-                  onClick={() => handleCategoryClick(category)}
-                  style={{ animationDelay: `${idx * 60}ms` }}
-                >
-                  <td className="px-6 py-6 align-middle w-1/4">
-                    <div className="flex items-center gap-3">
-                      <div className={`w-3 h-3 rounded-full ${category.color}`}></div>
-                      <span className="font-medium text-gray-900 text-base">{category.name}</span>
-                    </div>
-                  </td>
-                  <td className="px-6 py-6 align-middle w-1/3">
-                    <div className="flex flex-col items-start gap-1">
-                      <span className="text-gray-700 text-lg font-semibold">${category.spent}</span>
-                      <span className="text-gray-400 text-sm">of ${category.budget}</span>
-                      <span className="text-xs text-blue-500 font-medium mt-1">{category.transactions} transactions</span>
-                    </div>
-                  </td>
-                  <td className="px-6 py-6 align-middle w-1/3">
-                    <div className="flex flex-col gap-2 w-full">
-                      <div className="w-full bg-gray-200 rounded-full h-2">
-                        <div
-                          className={`h-2 rounded-full ${category.color}`}
-                          style={{ width: `${(category.spent / category.budget) * 100}%` }}
-                        ></div>
+          <div className="space-y-4">
+            {categorySpending.slice(0, 4).map((category) => (
+              <div
+                key={category.id}
+                className="flex items-center justify-between cursor-pointer hover:bg-gray-50 p-2 rounded-xl transition-colors"
+                onClick={() => handleCategoryClick(category)}
+              >
+                <div className="flex items-center space-x-3">
+                  <div className={`w-10 h-10 rounded-full ${category.color} flex items-center justify-center text-white text-lg`}>
+                    {category.icon || '💰'}
+                  </div>
+                  <div>
+                    <p className="font-medium text-gray-900">{category.name}</p>
+                    <p className="text-sm text-gray-500">
+                      ${category.spent.toFixed(2)} of ${category.budget_limit?.toFixed(2) || '0.00'}
+                    </p>
+                  </div>
+                </div>
+                <div className="text-right">
+                  <p className="font-semibold text-gray-900">${category.spent.toFixed(2)}</p>
+                  <div className="w-16 bg-gray-200 rounded-full h-2 mt-1">
+                    <div
+                      className={`${category.color} h-2 rounded-full transition-all duration-300`}
+                      style={{ width: `${Math.min(category.percentage, 100)}%` }}
+                    ></div>
+                  </div>
+                </div>
+              </div>
+            ))}
+          </div>
+        </Card>
+
+        {/* Recent Transactions */}
+        <Card className="p-6 rounded-2xl shadow-lg">
+          <div className="flex items-center justify-between mb-4">
+            <h3 className="text-lg font-semibold text-gray-900">Recent Transactions</h3>
+            <Button
+              variant="ghost"
+              size="sm"
+              className="text-blue-600"
+              onClick={() => navigate("/transactions")}
+            >
+              View All
+            </Button>
+          </div>
+          <div className="space-y-3">
+            {recentTransactions.length === 0 ? (
+              <div className="text-center py-8 text-gray-500">
+                <DollarSign className="w-12 h-12 mx-auto mb-2 text-gray-300" />
+                <p>No transactions yet</p>
+                <p className="text-sm">Start by adding your first expense or income</p>
+              </div>
+            ) : (
+              recentTransactions.map((transaction) => {
+                const category = categories.find(c => c.id === transaction.category_id);
+                return (
+                  <div
+                    key={transaction.id}
+                    className="flex items-center justify-between p-3 hover:bg-gray-50 rounded-xl cursor-pointer transition-colors"
+                    onClick={() => handleTransactionClick(transaction)}
+                  >
+                    <div className="flex items-center space-x-3">
+                      <div className={`w-10 h-10 rounded-full ${category?.color || 'bg-gray-500'} flex items-center justify-center text-white text-sm`}>
+                        {category?.icon || transaction.type === 'income' ? '💰' : '💸'}
+                      </div>
+                      <div>
+                        <p className="font-medium text-gray-900">{transaction.title}</p>
+                        <p className="text-sm text-gray-500">
+                          {new Date(transaction.date).toLocaleDateString()} • {category?.name || 'Unknown'}
+                        </p>
                       </div>
                     </div>
-                  </td>
-                </tr>
-              ))}
-            </tbody>
-          </table>
-        </div>
-
-        {/* Recent Transactions Table */}
-        <div className="glass-table rounded-2xl overflow-hidden shadow-xl border border-blue-100/40 backdrop-blur-xl">
-          <div className="flex items-center justify-between px-6 pt-6 pb-2">
-            <h3 className="text-lg font-semibold text-gray-900">Recent Transactions</h3>
-            <Button variant="ghost" size="sm" className="text-blue-600" onClick={() => navigate("/transactions")}>View All</Button>
-          </div>
-          <table className="w-full text-left animate-table-fade">
-            <tbody>
-              {recentTransactions.map((transaction, idx) => (
-                <tr
-                  key={transaction.id}
-                  className="group transition-all duration-200 hover:bg-blue-50/40 cursor-pointer"
-                  onClick={() => handleTransactionClick(transaction)}
-                  style={{ animationDelay: `${idx * 60}ms` }}
-                >
-                  <td className="px-6 py-5 align-middle">
-                    <div className={`w-10 h-10 rounded-full ${transaction.color} flex items-center justify-center`}>
-                      {transaction.amount > 0 ? (
-                        <TrendingUp className="w-5 h-5" />
-                      ) : (
-                        <TrendingDown className="w-5 h-5" />
-                      )}
+                    <div className="text-right">
+                      <p className={`font-semibold ${
+                        transaction.type === 'income' ? 'text-green-600' : 'text-red-600'
+                      }`}>
+                        {transaction.type === 'income' ? '+' : '-'}${transaction.amount.toFixed(2)}
+                      </p>
+                      <p className="text-xs text-gray-500 capitalize">{transaction.status}</p>
                     </div>
-                  </td>
-                  <td className="px-6 py-5 align-middle">
-                    <p className="font-medium text-gray-900">{transaction.title}</p>
-                    <p className="text-sm text-gray-500">{transaction.category} • {transaction.date}</p>
-                  </td>
-                  <td className="px-6 py-5 align-middle text-right">
-                    <span className={`font-semibold ${transaction.amount > 0 ? "text-green-600" : "text-red-600"}`}>
-                      {transaction.amount > 0 ? "+" : ""}${Math.abs(transaction.amount).toFixed(2)}
-                    </span>
-                    <p className="text-xs text-gray-500">{transaction.time}</p>
-                  </td>
-                </tr>
-              ))}
-            </tbody>
-          </table>
-        </div>
+                  </div>
+                );
+              })
+            )}
+          </div>
+        </Card>
       </div>
+
       <BottomNavigation />
-      {/* Custom Animations & Glass Styles */}
-      <style>{`
-        .glass-balance {
-          background: linear-gradient(120deg, rgba(30,64,175,0.85) 0%, rgba(56,189,248,0.7) 100%);
-          backdrop-filter: blur(18px) saturate(1.2);
-        }
-        .glass-table {
-          background: linear-gradient(120deg, rgba(255,255,255,0.7) 0%, rgba(186,230,253,0.5) 100%);
-          backdrop-filter: blur(16px) saturate(1.1);
-        }
-        @keyframes fade-in {
-          from { opacity: 0; transform: translateY(32px); }
-          to { opacity: 1; transform: translateY(0); }
-        }
-        .animate-fade-in {
-          animation: fade-in 0.7s cubic-bezier(.4,2,.6,1);
-        }
-        @keyframes table-fade {
-          from { opacity: 0; transform: translateY(24px); }
-          to { opacity: 1; transform: translateY(0); }
-        }
-        .animate-table-fade tr {
-          animation: table-fade 0.5s cubic-bezier(.4,2,.6,1) both;
-        }
-        @keyframes dropdown-fade {
-          from { opacity: 0; transform: translateY(-12px) scale(0.98); }
-          to { opacity: 1; transform: translateY(0) scale(1); }
-        }
-        .animate-dropdown-fade {
-          animation: dropdown-fade 0.25s cubic-bezier(.4,2,.6,1);
-        }
-      `}</style>
     </div>
   );
 };

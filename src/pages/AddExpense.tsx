@@ -10,14 +10,24 @@ import { Card } from "@/components/ui/card";
 import BottomNavigation from "@/components/BottomNavigation";
 import { ArrowLeft, Camera, Upload, Scan } from "lucide-react";
 import { useToast } from "@/hooks/use-toast";
+import { useAuth } from "@/hooks/useAuth";
+import { transactionService } from "@/services/transactionService";
+import { categoryService } from "@/services/categoryService";
+import { paymentMethodService } from "@/services/paymentMethodService";
+import { receiptService } from "@/services/receiptService";
+import { useQuery, useMutation, useQueryClient } from "@tanstack/react-query";
 
 const AddExpense = () => {
   const navigate = useNavigate();
   const { toast } = useToast();
+  const { user } = useAuth();
+  const queryClient = useQueryClient();
   const [isScanning, setIsScanning] = useState(false);
   const [formData, setFormData] = useState({
     amount: "",
-    category: "",
+    category_id: "",
+    payment_method_id: "",
+    title: "",
     description: "",
     date: new Date().toISOString().split('T')[0],
     receipt: null as File | null,
@@ -27,36 +37,75 @@ const AddExpense = () => {
   const cameraInputRef = useRef<HTMLInputElement>(null);
   const uploadInputRef = useRef<HTMLInputElement>(null);
 
-  const categories = [
-    "Food & Dining",
-    "Transportation",
-    "Shopping",
-    "Entertainment",
-    "Bills & Utilities",
-    "Healthcare",
-    "Travel",
-    "Education",
-    "Other"
-  ];
+  // Fetch categories
+  const { data: categories = [] } = useQuery({
+    queryKey: ['categories'],
+    queryFn: categoryService.getCategories,
+    enabled: !!user,
+  });
 
-  const handleReceiptUpload = (event: React.ChangeEvent<HTMLInputElement>) => {
+  // Fetch payment methods
+  const { data: paymentMethods = [] } = useQuery({
+    queryKey: ['paymentMethods'],
+    queryFn: paymentMethodService.getPaymentMethods,
+    enabled: !!user,
+  });
+
+  // Create transaction mutation
+  const createTransactionMutation = useMutation({
+    mutationFn: transactionService.createTransaction,
+    onSuccess: () => {
+      queryClient.invalidateQueries({ queryKey: ['transactions'] });
+      toast({
+        title: "Expense Added!",
+        description: `$${formData.amount} expense saved successfully.`,
+      });
+      navigate("/dashboard");
+    },
+    onError: (error: any) => {
+      toast({
+        title: "Error",
+        description: error.message || "Failed to save expense. Please try again.",
+        variant: "destructive",
+      });
+    },
+  });
+
+  const handleReceiptUpload = async (event: React.ChangeEvent<HTMLInputElement>) => {
     const file = event.target.files?.[0];
     if (file) {
       setFormData(prev => ({ ...prev, receipt: file, receiptUrl: URL.createObjectURL(file) }));
       setIsScanning(true);
-      setTimeout(() => {
-        setFormData(prev => ({
-          ...prev,
-          amount: "47.83",
-          category: "Food & Dining",
-          description: "Grocery Store - Walmart",
-        }));
-        setIsScanning(false);
+      
+      try {
+        const result = await receiptService.processReceiptWithMindee(file);
+        
+        // Extract data from Mindee response
+        if (result.document && result.document.inference && result.document.inference.prediction) {
+          const prediction = result.document.inference.prediction;
+          
+          setFormData(prev => ({
+            ...prev,
+            amount: prediction.total_amount?.value?.toString() || prev.amount,
+            title: prediction.supplier_name?.value || "Receipt Transaction",
+            description: `Receipt from ${prediction.supplier_name?.value || 'Store'}`,
+          }));
+          
+          toast({
+            title: "Receipt Scanned!",
+            description: "Details extracted successfully. Please review and save.",
+          });
+        }
+      } catch (error) {
+        console.error('Receipt processing failed:', error);
         toast({
-          title: "Receipt Scanned!",
-          description: "Details extracted successfully. Please review and save.",
+          title: "Scan Failed",
+          description: "Could not process receipt. Please enter details manually.",
+          variant: "destructive",
         });
-      }, 2000);
+      } finally {
+        setIsScanning(false);
+      }
     }
   };
 
@@ -79,7 +128,7 @@ const AddExpense = () => {
   };
 
   const handleSave = () => {
-    if (!formData.amount || !formData.category) {
+    if (!formData.amount || !formData.category_id) {
       toast({
         title: "Missing Information",
         description: "Please fill in amount and category.",
@@ -87,11 +136,23 @@ const AddExpense = () => {
       });
       return;
     }
-    toast({
-      title: "Expense Added!",
-      description: `$${formData.amount} expense saved successfully.`,
-    });
-    navigate("/dashboard");
+
+    const transactionData = {
+      title: formData.title || "Expense",
+      description: formData.description,
+      amount: parseFloat(formData.amount),
+      type: 'expense' as const,
+      date: formData.date,
+      time: new Date().toTimeString().split(' ')[0],
+      category_id: parseInt(formData.category_id),
+      payment_method_id: formData.payment_method_id ? parseInt(formData.payment_method_id) : undefined,
+      status: 'completed' as const,
+      location: "",
+      notes: formData.description,
+      receipt_image_url: formData.receiptUrl,
+    };
+
+    createTransactionMutation.mutate(transactionData);
   };
 
   return (
@@ -111,10 +172,10 @@ const AddExpense = () => {
           <h1 className="text-lg font-semibold">Add Expense</h1>
           <Button
             onClick={handleSave}
-            disabled={!formData.amount || !formData.category}
+            disabled={!formData.amount || !formData.category_id || createTransactionMutation.isPending}
             className="bg-blue-600 hover:bg-blue-700 active:scale-[0.98] text-white text-base px-6 py-3 rounded-2xl font-bold shadow-lg transition-all duration-150 animate-pulse-on-press"
           >
-            Save
+            {createTransactionMutation.isPending ? "Saving..." : "Save"}
           </Button>
         </div>
       </div>
@@ -208,10 +269,10 @@ const AddExpense = () => {
         {/* Manual Entry Form */}
         <Card className="p-6 glass-card rounded-2xl shadow-xl">
           <h3 className="text-lg font-semibold mb-4">Expense Details</h3>
-          <div className="grid grid-cols-1 md:grid-cols-2 gap-x-8 gap-y-8">
-            <div className="space-y-6">
+          <div className="space-y-6">
+            <div className="grid grid-cols-1 md:grid-cols-2 gap-6">
               <div className="space-y-2">
-                <Label htmlFor="amount" className="text-gray-700 font-medium block mb-1 ml-2">Amount *</Label>
+                <Label htmlFor="amount" className="text-gray-700 font-medium">Amount *</Label>
                 <div className="relative">
                   <span className="absolute left-3 top-1/2 -translate-y-1/2 text-gray-500 text-lg">$</span>
                   <Input
@@ -224,58 +285,80 @@ const AddExpense = () => {
                     onBlur={() => setInputFocus(null)}
                     className={`h-14 rounded-xl pl-8 text-lg font-semibold transition-all duration-150 ${inputFocus === 'amount' ? 'ring-2 ring-blue-300 shadow-md' : ''}`}
                     step="0.01"
-                    aria-label="Amount"
                   />
                 </div>
               </div>
+
               <div className="space-y-2">
-                <Label htmlFor="category" className="text-gray-700 font-medium block mb-1 ml-2">Category *</Label>
-                <Select value={formData.category} onValueChange={(value) => setFormData(prev => ({ ...prev, category: value }))}>
-                  <SelectTrigger
-                    id="category"
-                    className={`h-14 rounded-xl transition-all duration-150 ${inputFocus === 'category' ? 'ring-2 ring-blue-300 shadow-md' : ''}`}
-                    onFocus={() => setInputFocus('category')}
-                    onBlur={() => setInputFocus(null)}
-                    aria-label="Category"
-                  >
+                <Label htmlFor="title" className="text-gray-700 font-medium">Title</Label>
+                <Input
+                  id="title"
+                  placeholder="What did you buy?"
+                  value={formData.title}
+                  onChange={(e) => setFormData(prev => ({ ...prev, title: e.target.value }))}
+                  className="h-14 rounded-xl"
+                />
+              </div>
+            </div>
+
+            <div className="grid grid-cols-1 md:grid-cols-2 gap-6">
+              <div className="space-y-2">
+                <Label htmlFor="category" className="text-gray-700 font-medium">Category *</Label>
+                <Select value={formData.category_id} onValueChange={(value) => setFormData(prev => ({ ...prev, category_id: value }))}>
+                  <SelectTrigger className="h-14 rounded-xl">
                     <SelectValue placeholder="Select category" />
                   </SelectTrigger>
                   <SelectContent>
                     {categories.map((category) => (
-                      <SelectItem key={category} value={category}>
-                        {category}
+                      <SelectItem key={category.id} value={category.id.toString()}>
+                        <div className="flex items-center space-x-2">
+                          <span>{category.icon || '💰'}</span>
+                          <span>{category.name}</span>
+                        </div>
+                      </SelectItem>
+                    ))}
+                  </SelectContent>
+                </Select>
+              </div>
+
+              <div className="space-y-2">
+                <Label htmlFor="payment_method" className="text-gray-700 font-medium">Payment Method</Label>
+                <Select value={formData.payment_method_id} onValueChange={(value) => setFormData(prev => ({ ...prev, payment_method_id: value }))}>
+                  <SelectTrigger className="h-14 rounded-xl">
+                    <SelectValue placeholder="Select payment method" />
+                  </SelectTrigger>
+                  <SelectContent>
+                    {paymentMethods.map((method) => (
+                      <SelectItem key={method.id} value={method.id.toString()}>
+                        {method.name} {method.last_four_digits && `****${method.last_four_digits}`}
                       </SelectItem>
                     ))}
                   </SelectContent>
                 </Select>
               </div>
             </div>
-            <div className="space-y-6">
+
+            <div className="grid grid-cols-1 md:grid-cols-2 gap-6">
               <div className="space-y-2">
-                <Label htmlFor="description" className="text-gray-700 font-medium block mb-1 ml-2">Description</Label>
+                <Label htmlFor="description" className="text-gray-700 font-medium">Description</Label>
                 <Textarea
                   id="description"
                   placeholder="Add a note about this expense..."
                   value={formData.description}
                   onChange={(e) => setFormData(prev => ({ ...prev, description: e.target.value }))}
-                  onFocus={() => setInputFocus('description')}
-                  onBlur={() => setInputFocus(null)}
-                  className={`rounded-xl resize-none transition-all duration-150 ${inputFocus === 'description' ? 'ring-2 ring-blue-300 shadow-md' : ''}`}
+                  className="rounded-xl resize-none"
                   rows={3}
-                  aria-label="Description"
                 />
               </div>
+
               <div className="space-y-2">
-                <Label htmlFor="date" className="text-gray-700 font-medium block mb-1 ml-2">Date</Label>
+                <Label htmlFor="date" className="text-gray-700 font-medium">Date</Label>
                 <Input
                   id="date"
                   type="date"
                   value={formData.date}
                   onChange={(e) => setFormData(prev => ({ ...prev, date: e.target.value }))}
-                  onFocus={() => setInputFocus('date')}
-                  onBlur={() => setInputFocus(null)}
-                  className={`h-14 rounded-xl transition-all duration-150 ${inputFocus === 'date' ? 'ring-2 ring-blue-300 shadow-md' : ''}`}
-                  aria-label="Date"
+                  className="h-14 rounded-xl"
                 />
               </div>
             </div>
@@ -300,35 +383,6 @@ const AddExpense = () => {
         </Card>
       </div>
       <BottomNavigation />
-      {/* Custom Animations & Glass Styles */}
-      <style>{`
-        .glass-card {
-          background: linear-gradient(120deg, rgba(255,255,255,0.7) 0%, rgba(186,230,253,0.5) 100%);
-          backdrop-filter: blur(16px) saturate(1.1);
-        }
-        @keyframes fade-in-up {
-          from { opacity: 0; transform: translateY(32px); }
-          to { opacity: 1; transform: translateY(0); }
-        }
-        .animate-fade-in-up {
-          animation: fade-in-up 0.7s cubic-bezier(.4,2,.6,1);
-        }
-        @keyframes zoom-in {
-          from { opacity: 0; transform: scale(0.92); }
-          to { opacity: 1; transform: scale(1); }
-        }
-        .animate-zoom-in {
-          animation: zoom-in 0.4s cubic-bezier(.4,2,.6,1);
-        }
-        @keyframes pulse-on-press {
-          0% { box-shadow: 0 0 0 0 rgba(59,130,246,0.4); }
-          70% { box-shadow: 0 0 0 8px rgba(59,130,246,0); }
-          100% { box-shadow: 0 0 0 0 rgba(59,130,246,0); }
-        }
-        .animate-pulse-on-press:active {
-          animation: pulse-on-press 0.4s;
-        }
-      `}</style>
     </div>
   );
 };
