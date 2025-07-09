@@ -1,4 +1,3 @@
-
 import { useState, useRef } from "react";
 import { useNavigate } from "react-router-dom";
 import { Button } from "@/components/ui/button";
@@ -59,13 +58,24 @@ const AddExpense = () => {
   // Create transaction mutation
   const createTransactionMutation = useMutation({
     mutationFn: transactionService.createTransaction,
-    onSuccess: () => {
-      queryClient.invalidateQueries({ queryKey: ['transactions'] });
+    onSuccess: async () => {
+      // Invalidate and refetch all related queries to ensure fresh data
+      await queryClient.invalidateQueries({ queryKey: ['transactions'] });
+      await queryClient.invalidateQueries({ queryKey: ['categories'] });
+      await queryClient.invalidateQueries({ queryKey: ['notifications'] });
+      
+      // Force refetch to ensure data is immediately available
+      await queryClient.refetchQueries({ queryKey: ['transactions'] });
+      
       toast({
         title: "Expense Added!",
         description: `$${formData.amount} expense saved successfully.`,
       });
-      navigate("/dashboard");
+      
+      // Navigate back to dashboard after ensuring queries are updated
+      setTimeout(() => {
+        navigate("/dashboard");
+      }, 100);
     },
     onError: (error: any) => {
       console.error('Transaction creation error:', error);
@@ -170,8 +180,13 @@ const AddExpense = () => {
     createTransactionMutation.mutate(transactionData);
   };
 
-  const handleBack = () => {
+  const handleBack = async () => {
     try {
+      // Invalidate queries before navigation to ensure fresh data
+      await queryClient.invalidateQueries({ queryKey: ['transactions'] });
+      await queryClient.invalidateQueries({ queryKey: ['categories'] });
+      await queryClient.invalidateQueries({ queryKey: ['notifications'] });
+      
       navigate('/dashboard');
     } catch (error) {
       console.error('Navigation error:', error);
@@ -343,15 +358,20 @@ const AddExpense = () => {
                     <span className="text-red-500">Error loading categories</span>
                   </div>
                 ) : categories.length === 0 ? (
-                  <Button
-                    type="button"
-                    variant="outline"
-                    onClick={handleAddCategory}
-                    className="w-full h-14 rounded-xl border-dashed border-2 border-gray-300 hover:border-blue-400 hover:bg-blue-50 text-gray-600 hover:text-blue-600 transition-all duration-150"
-                  >
-                    <Plus className="w-4 h-4 mr-2" />
-                    Add Category
-                  </Button>
+                  <div className="space-y-2">
+                    <div className="h-14 rounded-xl border flex items-center justify-center bg-gray-50">
+                      <span className="text-gray-500">No categories available</span>
+                    </div>
+                    <Button
+                      type="button"
+                      variant="outline"
+                      onClick={handleAddCategory}
+                      className="w-full border-dashed border-2 border-blue-300 hover:border-blue-400 hover:bg-blue-50 text-blue-600 hover:text-blue-700 transition-all duration-150"
+                    >
+                      <Plus className="w-4 h-4 mr-2" />
+                      Add Category
+                    </Button>
+                  </div>
                 ) : (
                   <Select value={formData.category_id} onValueChange={(value) => {
                     console.log('Category selected:', value);
@@ -385,15 +405,20 @@ const AddExpense = () => {
                     <span className="text-red-500">Error loading payment methods</span>
                   </div>
                 ) : paymentMethods.length === 0 ? (
-                  <Button
-                    type="button"
-                    variant="outline"
-                    onClick={handleAddPaymentMethod}
-                    className="w-full h-14 rounded-xl border-dashed border-2 border-gray-300 hover:border-blue-400 hover:bg-blue-50 text-gray-600 hover:text-blue-600 transition-all duration-150"
-                  >
-                    <Plus className="w-4 h-4 mr-2" />
-                    Add Payment Method
-                  </Button>
+                  <div className="space-y-2">
+                    <div className="h-14 rounded-xl border flex items-center justify-center bg-gray-50">
+                      <span className="text-gray-500">No payment methods available</span>
+                    </div>
+                    <Button
+                      type="button"
+                      variant="outline"
+                      onClick={handleAddPaymentMethod}
+                      className="w-full border-dashed border-2 border-blue-300 hover:border-blue-400 hover:bg-blue-50 text-blue-600 hover:text-blue-700 transition-all duration-150"
+                    >
+                      <Plus className="w-4 h-4 mr-2" />
+                      Add Payment Method
+                    </Button>
+                  </div>
                 ) : (
                   <Select value={formData.payment_method_id} onValueChange={(value) => {
                     console.log('Payment method selected:', value);

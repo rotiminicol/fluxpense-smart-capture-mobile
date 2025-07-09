@@ -26,6 +26,13 @@ export const tokenManager = {
     console.log('Checking authentication, token exists:', !!token);
     return !!token;
   },
+  getCurrentUserId: () => {
+    // This should be extracted from the token or fetched from user context
+    // For debugging purposes, we'll log this
+    const token = localStorage.getItem('auth_token');
+    console.log('DEBUGGING: Getting current user ID with token:', token?.substring(0, 20) + '...');
+    return null; // This needs to be implemented properly
+  }
 };
 
 // Base API client
@@ -45,11 +52,14 @@ class ApiClient {
 
     console.log(`API Request: ${options.method || 'GET'} ${url}`);
     console.log('Token available:', !!token);
+    console.log('DEBUGGING: Full token for user isolation check:', token?.substring(0, 50) + '...');
 
     const config: RequestInit = {
       headers: {
         'Content-Type': 'application/json',
         ...(token && { Authorization: `Bearer ${token}` }),
+        // Add additional headers for user isolation debugging
+        'X-Debug-User-Isolation': 'true',
         ...options.headers,
       },
       ...options,
@@ -76,6 +86,17 @@ class ApiClient {
 
       const responseData = await response.json();
       console.log('API Response Data:', responseData);
+      
+      // Add debugging for user isolation
+      if (Array.isArray(responseData)) {
+        console.log('DEBUGGING: Data isolation check - received', responseData.length, 'items');
+        responseData.forEach((item, index) => {
+          if (item.user_id !== undefined) {
+            console.log(`DEBUGGING: Item ${index} user_id:`, item.user_id);
+          }
+        });
+      }
+      
       return responseData;
     } catch (error) {
       console.error('API request failed:', error);

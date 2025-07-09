@@ -1,4 +1,3 @@
-
 import { useState, useEffect } from "react";
 import { useNavigate } from "react-router-dom";
 import { Button } from "@/components/ui/button";
@@ -12,17 +11,30 @@ import { transactionService } from "@/services/transactionService";
 import { categoryService } from "@/services/categoryService";
 import { notificationService } from "@/services/notificationService";
 import { Transaction, Category, Notification } from "@/types/api";
-import { useQuery } from "@tanstack/react-query";
+import { useQuery, useQueryClient } from "@tanstack/react-query";
 import { useToast } from "@/hooks/use-toast";
 
 const Dashboard = () => {
   const navigate = useNavigate();
   const { user, loading } = useAuth();
   const { toast } = useToast();
+  const queryClient = useQueryClient();
   const [selectedMonth, setSelectedMonth] = useState("February");
 
-  // Debug log for user object
+  // Debug log for user object and add critical user isolation debugging
   console.log("USER FROM useAuth", user);
+  console.log("CRITICAL DEBUG: Current user ID for data isolation:", user?.id);
+
+  // Force refresh queries when component mounts
+  useEffect(() => {
+    if (user) {
+      console.log("Dashboard mounted for user:", user.id, user.email);
+      // Invalidate and refetch all queries to ensure fresh data
+      queryClient.invalidateQueries({ queryKey: ['transactions'] });
+      queryClient.invalidateQueries({ queryKey: ['categories'] });
+      queryClient.invalidateQueries({ queryKey: ['notifications'] });
+    }
+  }, [user, queryClient]);
 
   // Only render after loading is false
   if (loading) {
@@ -45,26 +57,79 @@ const Dashboard = () => {
     );
   }
 
-  // Fetch transactions
-  const { data: transactions = [], isLoading: transactionsLoading } = useQuery({
-    queryKey: ['transactions'],
-    queryFn: transactionService.getTransactions,
+  // Fetch transactions with proper error handling and user isolation debugging
+  const { data: transactions = [], isLoading: transactionsLoading, error: transactionsError } = useQuery({
+    queryKey: ['transactions', user.id], // Include user ID in query key for isolation
+    queryFn: async () => {
+      console.log("FETCHING TRANSACTIONS for user:", user.id, user.email);
+      const data = await transactionService.getTransactions();
+      console.log("RECEIVED TRANSACTIONS DATA:", data);
+      
+      // Critical debugging: Check if we're getting data for the wrong user
+      if (Array.isArray(data)) {
+        const userIds = [...new Set(data.map(t => t.user_id))];
+        console.log("CRITICAL: Transaction data contains user_ids:", userIds);
+        console.log("CRITICAL: Current user ID:", user.id);
+        
+        if (userIds.some(id => id !== 0 && id !== user.id)) {
+          console.error("CRITICAL DATA ISOLATION ISSUE: Receiving transactions for other users!");
+          toast({
+            title: "Data Isolation Warning",
+            description: "Detected data from other users. Please contact support.",
+            variant: "destructive",
+          });
+        }
+      }
+      
+      return data;
+    },
     enabled: !!user,
+    staleTime: 0, // Always refetch to ensure fresh data
+    refetchOnMount: true,
+    refetchOnWindowFocus: true,
   });
 
-  // Fetch categories
+  // Fetch categories with user isolation debugging
   const { data: categories = [], isLoading: categoriesLoading } = useQuery({
-    queryKey: ['categories'],
-    queryFn: categoryService.getCategories,
+    queryKey: ['categories', user.id], // Include user ID in query key for isolation
+    queryFn: async () => {
+      console.log("FETCHING CATEGORIES for user:", user.id, user.email);
+      const data = await categoryService.getCategories();
+      console.log("RECEIVED CATEGORIES DATA:", data);
+      
+      // Check for user isolation issues
+      if (Array.isArray(data)) {
+        const userIds = [...new Set(data.map(c => c.user_id))];
+        console.log("CRITICAL: Category data contains user_ids:", userIds);
+        
+        if (userIds.some(id => id !== 0 && id !== user.id)) {
+          console.error("CRITICAL DATA ISOLATION ISSUE: Receiving categories for other users!");
+        }
+      }
+      
+      return data;
+    },
     enabled: !!user,
+    staleTime: 0,
+    refetchOnMount: true,
   });
 
   // Fetch notifications
   const { data: notifications = [], isLoading: notificationsLoading } = useQuery({
-    queryKey: ['notifications'],
-    queryFn: notificationService.getNotifications,
+    queryKey: ['notifications', user.id], // Include user ID in query key for isolation
+    queryFn: async () => {
+      console.log("FETCHING NOTIFICATIONS for user:", user.id, user.email);
+      return notificationService.getNotifications();
+    },
     enabled: !!user,
+    staleTime: 0,
+    refetchOnMount: true,
   });
+
+  // Show error state if there are critical errors
+  if (transactionsError) {
+    console.error("Transactions loading error:", transactionsError);
+  }
 
   // Calculate summary data
   const currentMonthTransactions = transactions.filter(t => {
@@ -108,6 +173,7 @@ const Dashboard = () => {
       try {
         await notificationService.markAsRead(notification.id);
         // Refetch notifications to update the UI
+        queryClient.invalidateQueries({ queryKey: ['notifications'] });
       } catch (error) {
         console.error('Failed to mark notification as read:', error);
       }
@@ -139,6 +205,24 @@ const Dashboard = () => {
     });
   };
 
+  // Show loading state while any critical data is loading
+  if (transactionsLoading || categoriesLoading || notificationsLoading) {
+    return (
+      <div className="min-h-screen bg-gradient-to-br from-blue-50 to-indigo-100 pb-20">
+        <div className="bg-white/90 backdrop-blur-lg px-6 py-6 rounded-b-3xl shadow-xl">
+          <div className="flex items-center justify-between mb-6">
+            <div>
+              <h1 className="text-2xl font-bold text-gray-900">Loading...</h1>
+              <p className="text-gray-600">Fetching your latest data</p>
+            </div>
+            <div className="animate-spin rounded-full h-8 w-8 border-b-2 border-blue-600"></div>
+          </div>
+        </div>
+        <BottomNavigation />
+      </div>
+    );
+  }
+
   return (
     <div className="min-h-screen bg-gradient-to-br from-blue-50 to-indigo-100 pb-20">
       {/* Header */}
@@ -147,20 +231,11 @@ const Dashboard = () => {
           <div>
             <h1 className="text-2xl font-bold text-gray-900">Welcome back!</h1>
             <p className="text-gray-600">
-              {user?.email ||
-                (user && (user as any).username) ||
-                (user && (user as any).user_email) ||
-                (user && (user as any).email_address) ||
-                (user && (user as any).emailAddress) ||
-                (user && (user as any).contact_email) ||
-                user?.name ||
-                (user ? JSON.stringify(user, null, 2) : 'User')}
+              {user?.email || user?.name || 'User'}
             </p>
-            {!user?.email && (
-              <div className="text-red-600 text-xs mt-2">
-                Warning: No user email found. Please check your backend /auth/me response.
-              </div>
-            )}
+            <p className="text-xs text-blue-600 mt-1">
+              User ID: {user.id} | Transactions: {transactions.length}
+            </p>
           </div>
           <div className="flex items-center space-x-4">
             <Popover>
@@ -354,7 +429,7 @@ const Dashboard = () => {
                   >
                     <div className="flex items-center space-x-3">
                       <div className={`w-10 h-10 rounded-full ${category?.color || 'bg-gray-500'} flex items-center justify-center text-white text-sm`}>
-                        {category?.icon || transaction.type === 'income' ? '💰' : '💸'}
+                        {category?.icon || (transaction.type === 'income' ? '💰' : '💸')}
                       </div>
                       <div>
                         <p className="font-medium text-gray-900">{transaction.title}</p>
