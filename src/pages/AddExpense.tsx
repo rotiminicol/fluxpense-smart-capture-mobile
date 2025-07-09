@@ -38,18 +38,23 @@ const AddExpense = () => {
   const uploadInputRef = useRef<HTMLInputElement>(null);
 
   // Fetch categories
-  const { data: categories = [] } = useQuery({
+  const { data: categories = [], isLoading: categoriesLoading, error: categoriesError } = useQuery({
     queryKey: ['categories'],
     queryFn: categoryService.getCategories,
     enabled: !!user,
   });
 
   // Fetch payment methods
-  const { data: paymentMethods = [] } = useQuery({
+  const { data: paymentMethods = [], isLoading: paymentMethodsLoading, error: paymentMethodsError } = useQuery({
     queryKey: ['paymentMethods'],
     queryFn: paymentMethodService.getPaymentMethods,
     enabled: !!user,
   });
+
+  console.log('Categories:', categories);
+  console.log('Payment Methods:', paymentMethods);
+  console.log('Categories Error:', categoriesError);
+  console.log('Payment Methods Error:', paymentMethodsError);
 
   // Create transaction mutation
   const createTransactionMutation = useMutation({
@@ -63,6 +68,7 @@ const AddExpense = () => {
       navigate("/dashboard");
     },
     onError: (error: any) => {
+      console.error('Transaction creation error:', error);
       toast({
         title: "Error",
         description: error.message || "Failed to save expense. Please try again.",
@@ -97,7 +103,7 @@ const AddExpense = () => {
         console.error('Receipt processing failed:', error);
         toast({
           title: "Scan Failed",
-          description: error?.message || (typeof error === 'string' ? error : JSON.stringify(error)) || "Could not process receipt. Please enter details manually.",
+          description: error?.message || "Could not process receipt. Please enter details manually.",
           variant: "destructive",
         });
       } finally {
@@ -125,6 +131,8 @@ const AddExpense = () => {
   };
 
   const handleSave = () => {
+    console.log('Form data before validation:', formData);
+    
     if (!formData.amount || !formData.category_id) {
       toast({
         title: "Missing Information",
@@ -149,24 +157,28 @@ const AddExpense = () => {
       receipt_image_url: formData.receiptUrl,
     };
 
+    console.log('Transaction data to submit:', transactionData);
     createTransactionMutation.mutate(transactionData);
   };
 
+  const handleBack = () => {
+    try {
+      navigate('/dashboard');
+    } catch (error) {
+      console.error('Navigation error:', error);
+      window.location.href = '/dashboard';
+    }
+  };
+
   return (
-    <div className="min-h-screen bg-gray-50 pb-20 animate-fade-in-up">
+    <div className="min-h-screen bg-gray-50 pb-20">
       {/* Header */}
       <div className="bg-white/80 backdrop-blur-lg px-4 py-4 border-b border-gray-100 shadow-xl rounded-b-2xl">
         <div className="flex items-center justify-between">
           <Button
             variant="ghost"
             size="icon"
-            onClick={() => {
-              if (window.history.length > 2) {
-                navigate(-1);
-              } else {
-                navigate('/dashboard');
-              }
-            }}
+            onClick={handleBack}
             className="w-11 h-11 rounded-full bg-white/80 shadow-lg border border-blue-100 hover:bg-blue-50 text-blue-600 flex items-center justify-center transition-all duration-200"
             aria-label="Back"
           >
@@ -176,7 +188,7 @@ const AddExpense = () => {
           <Button
             onClick={handleSave}
             disabled={!formData.amount || !formData.category_id || createTransactionMutation.isPending}
-            className="bg-blue-600 hover:bg-blue-700 active:scale-[0.98] text-white text-base px-6 py-3 rounded-2xl font-bold shadow-lg transition-all duration-150 animate-pulse-on-press"
+            className="bg-blue-600 hover:bg-blue-700 active:scale-[0.98] text-white text-base px-6 py-3 rounded-2xl font-bold shadow-lg transition-all duration-150"
           >
             {createTransactionMutation.isPending ? "Saving..." : "Save"}
           </Button>
@@ -185,7 +197,7 @@ const AddExpense = () => {
 
       <div className="px-4 py-6 space-y-6">
         {/* Receipt Scanner */}
-        <Card className="p-6 glass-card rounded-2xl shadow-xl">
+        <Card className="p-6 rounded-2xl shadow-xl">
           <h3 className="text-lg font-semibold mb-4">Smart Receipt Scanner</h3>
           <div className="space-y-4">
             <div className="border-2 border-dashed border-gray-300 rounded-xl p-8 text-center bg-white/60 backdrop-blur-md transition-all duration-200">
@@ -197,7 +209,7 @@ const AddExpense = () => {
                 </div>
               ) : formData.receipt ? (
                 <div className="space-y-4">
-                  <div className="bg-green-100 text-green-600 rounded-full w-12 h-12 flex items-center justify-center mx-auto animate-zoom-in">
+                  <div className="bg-green-100 text-green-600 rounded-full w-12 h-12 flex items-center justify-center mx-auto">
                     <Scan className="w-6 h-6" />
                   </div>
                   <p className="text-gray-900 font-medium">Receipt scanned successfully!</p>
@@ -206,7 +218,7 @@ const AddExpense = () => {
                     <img
                       src={formData.receiptUrl}
                       alt="Receipt Preview"
-                      className="mx-auto mt-2 rounded-xl shadow-md w-32 h-32 object-cover animate-zoom-in"
+                      className="mx-auto mt-2 rounded-xl shadow-md w-32 h-32 object-cover"
                     />
                   )}
                 </div>
@@ -270,7 +282,7 @@ const AddExpense = () => {
         </Card>
 
         {/* Manual Entry Form */}
-        <Card className="p-6 glass-card rounded-2xl shadow-xl">
+        <Card className="p-6 rounded-2xl shadow-xl">
           <h3 className="text-lg font-semibold mb-4">Expense Details</h3>
           <div className="space-y-6">
             <div className="grid grid-cols-1 md:grid-cols-2 gap-6">
@@ -307,37 +319,63 @@ const AddExpense = () => {
             <div className="grid grid-cols-1 md:grid-cols-2 gap-6">
               <div className="space-y-2">
                 <Label htmlFor="category" className="text-gray-700 font-medium">Category *</Label>
-                <Select value={formData.category_id} onValueChange={(value) => setFormData(prev => ({ ...prev, category_id: value }))}>
-                  <SelectTrigger className="h-14 rounded-xl">
-                    <SelectValue placeholder="Select category" />
-                  </SelectTrigger>
-                  <SelectContent>
-                    {categories.map((category) => (
-                      <SelectItem key={category.id} value={category.id.toString()}>
-                        <div className="flex items-center space-x-2">
-                          <span>{category.icon || '💰'}</span>
-                          <span>{category.name}</span>
-                        </div>
-                      </SelectItem>
-                    ))}
-                  </SelectContent>
-                </Select>
+                {categoriesLoading ? (
+                  <div className="h-14 rounded-xl border flex items-center justify-center">
+                    <span className="text-gray-500">Loading categories...</span>
+                  </div>
+                ) : categoriesError ? (
+                  <div className="h-14 rounded-xl border flex items-center justify-center">
+                    <span className="text-red-500">Error loading categories</span>
+                  </div>
+                ) : (
+                  <Select value={formData.category_id} onValueChange={(value) => {
+                    console.log('Category selected:', value);
+                    setFormData(prev => ({ ...prev, category_id: value }));
+                  }}>
+                    <SelectTrigger className="h-14 rounded-xl">
+                      <SelectValue placeholder="Select category" />
+                    </SelectTrigger>
+                    <SelectContent className="bg-white border shadow-lg">
+                      {categories.map((category) => (
+                        <SelectItem key={category.id} value={category.id.toString()}>
+                          <div className="flex items-center space-x-2">
+                            <span>{category.icon || '💰'}</span>
+                            <span>{category.name}</span>
+                          </div>
+                        </SelectItem>
+                      ))}
+                    </SelectContent>
+                  </Select>
+                )}
               </div>
 
               <div className="space-y-2">
                 <Label htmlFor="payment_method" className="text-gray-700 font-medium">Payment Method</Label>
-                <Select value={formData.payment_method_id} onValueChange={(value) => setFormData(prev => ({ ...prev, payment_method_id: value }))}>
-                  <SelectTrigger className="h-14 rounded-xl">
-                    <SelectValue placeholder="Select payment method" />
-                  </SelectTrigger>
-                  <SelectContent>
-                    {paymentMethods.map((method) => (
-                      <SelectItem key={method.id} value={method.id.toString()}>
-                        {method.name} {method.last_four_digits && `****${method.last_four_digits}`}
-                      </SelectItem>
-                    ))}
-                  </SelectContent>
-                </Select>
+                {paymentMethodsLoading ? (
+                  <div className="h-14 rounded-xl border flex items-center justify-center">
+                    <span className="text-gray-500">Loading payment methods...</span>
+                  </div>
+                ) : paymentMethodsError ? (
+                  <div className="h-14 rounded-xl border flex items-center justify-center">
+                    <span className="text-red-500">Error loading payment methods</span>
+                  </div>
+                ) : (
+                  <Select value={formData.payment_method_id} onValueChange={(value) => {
+                    console.log('Payment method selected:', value);
+                    setFormData(prev => ({ ...prev, payment_method_id: value }));
+                  }}>
+                    <SelectTrigger className="h-14 rounded-xl">
+                      <SelectValue placeholder="Select payment method" />
+                    </SelectTrigger>
+                    <SelectContent className="bg-white border shadow-lg">
+                      {paymentMethods.map((method) => (
+                        <SelectItem key={method.id} value={method.id.toString()}>
+                          {method.name} {method.last_four_digits && `****${method.last_four_digits}`}
+                        </SelectItem>
+                      ))}
+                    </SelectContent>
+                  </Select>
+                )}
               </div>
             </div>
 
@@ -369,7 +407,7 @@ const AddExpense = () => {
         </Card>
 
         {/* Quick Amounts */}
-        <Card className="p-6 glass-card rounded-2xl shadow-xl">
+        <Card className="p-6 rounded-2xl shadow-xl">
           <h3 className="text-lg font-semibold mb-4">Quick Amounts</h3>
           <div className="grid grid-cols-3 gap-3">
             {["5", "10", "25", "50", "100", "200"].map((amount) => (
