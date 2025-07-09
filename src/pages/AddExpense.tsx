@@ -7,7 +7,7 @@ import { Textarea } from "@/components/ui/textarea";
 import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from "@/components/ui/select";
 import { Card } from "@/components/ui/card";
 import BottomNavigation from "@/components/BottomNavigation";
-import { ArrowLeft, Camera, Upload, Scan, Plus } from "lucide-react";
+import { ArrowLeft, Camera, Upload, Scan, Plus, ShoppingCart, Receipt } from "lucide-react";
 import { useToast } from "@/hooks/use-toast";
 import { useAuth } from "@/hooks/useAuth";
 import { transactionService } from "@/services/transactionService";
@@ -22,6 +22,8 @@ const AddExpense = () => {
   const { user } = useAuth();
   const queryClient = useQueryClient();
   const [isScanning, setIsScanning] = useState(false);
+  const [entryMode, setEntryMode] = useState<'total' | 'itemwise'>('total');
+  const [extractedItems, setExtractedItems] = useState<any[]>([]);
   const [formData, setFormData] = useState({
     amount: "",
     category_id: "",
@@ -99,17 +101,25 @@ const AddExpense = () => {
       console.log('OCR Result:', result);
       
       if (result && result.parsed) {
+        // Use smart title instead of first product name
+        const smartTitle = result.parsed.smartTitle || result.parsed.merchant || 'Receipt';
+        
         setFormData(prev => ({
           ...prev,
           amount: result.parsed.total || prev.amount,
-          title: result.parsed.merchant || prev.title || 'Receipt',
+          title: smartTitle,
           description: result.parsed.merchant ? `Receipt from ${result.parsed.merchant}` : prev.description,
           date: result.parsed.date || prev.date,
         }));
+
+        // Store extracted items for itemwise entry option
+        if (result.parsed.items && result.parsed.items.length > 0) {
+          setExtractedItems(result.parsed.items);
+        }
         
         toast({
           title: "Scan Successful!",
-          description: "Receipt processed successfully. Form auto-filled with extracted data.",
+          description: "Receipt processed successfully. Choose how you'd like to add the expenses.",
         });
       } else {
         toast({
@@ -149,7 +159,65 @@ const AddExpense = () => {
     }
   };
 
+  const handleSaveItemwise = async () => {
+    if (extractedItems.length === 0) {
+      toast({
+        title: "No Items",
+        description: "No items found to save individually.",
+        variant: "destructive",
+      });
+      return;
+    }
+
+    try {
+      // Create separate transactions for each item
+      for (const item of extractedItems) {
+        const transactionData = {
+          title: item.name,
+          description: `Item from receipt - ${item.name}`,
+          amount: item.price,
+          type: 'expense' as const,
+          date: formData.date,
+          time: new Date().toTimeString().split(' ')[0],
+          category_id: parseInt(formData.category_id) || undefined,
+          payment_method_id: formData.payment_method_id ? parseInt(formData.payment_method_id) : undefined,
+          status: 'completed' as const,
+          location: "",
+          notes: `From receipt: ${item.rawLine}`,
+          receipt_image_url: formData.receiptUrl,
+        };
+
+        await transactionService.createTransaction(transactionData);
+      }
+
+      // Invalidate and refetch queries
+      await queryClient.invalidateQueries({ queryKey: ['transactions'] });
+      await queryClient.refetchQueries({ queryKey: ['transactions'] });
+
+      toast({
+        title: "Items Added!",
+        description: `${extractedItems.length} items saved as separate expenses.`,
+      });
+
+      setTimeout(() => {
+        navigate("/dashboard");
+      }, 100);
+    } catch (error: any) {
+      console.error('Itemwise transaction creation error:', error);
+      toast({
+        title: "Error",
+        description: "Failed to save items. Please try again.",
+        variant: "destructive",
+      });
+    }
+  };
+
   const handleSave = () => {
+    if (entryMode === 'itemwise') {
+      handleSaveItemwise();
+      return;
+    }
+
     console.log('Form data before validation:', formData);
     
     if (!formData.amount || !formData.category_id) {
@@ -219,7 +287,7 @@ const AddExpense = () => {
           <h1 className="text-lg font-semibold">Add Expense</h1>
           <Button
             onClick={handleSave}
-            disabled={!formData.amount || !formData.category_id || createTransactionMutation.isPending}
+            disabled={(!formData.amount || !formData.category_id) && entryMode === 'total' || createTransactionMutation.isPending}
             className="bg-blue-600 hover:bg-blue-700 active:scale-[0.98] text-white text-base px-6 py-3 rounded-2xl font-bold shadow-lg transition-all duration-150"
           >
             {createTransactionMutation.isPending ? "Saving..." : "Save"}
@@ -311,177 +379,231 @@ const AddExpense = () => {
           </div>
         </Card>
 
+        {/* Entry Mode Selection */}
+        {extractedItems.length > 0 && (
+          <Card className="p-6 rounded-2xl shadow-xl">
+            <h3 className="text-lg font-semibold mb-4">How would you like to add this expense?</h3>
+            <div className="grid grid-cols-2 gap-4">
+              <Button
+                variant={entryMode === 'total' ? 'default' : 'outline'}
+                onClick={() => setEntryMode('total')}
+                className="h-20 flex-col space-y-2"
+              >
+                <Receipt className="w-6 h-6" />
+                <div className="text-center">
+                  <div className="font-medium">Total Invoice</div>
+                  <div className="text-xs text-muted-foreground">Add as one expense</div>
+                </div>
+              </Button>
+              <Button
+                variant={entryMode === 'itemwise' ? 'default' : 'outline'}
+                onClick={() => setEntryMode('itemwise')}
+                className="h-20 flex-col space-y-2"
+              >
+                <ShoppingCart className="w-6 h-6" />
+                <div className="text-center">
+                  <div className="font-medium">Item by Item</div>
+                  <div className="text-xs text-muted-foreground">{extractedItems.length} items found</div>
+                </div>
+              </Button>
+            </div>
+            
+            {entryMode === 'itemwise' && (
+              <div className="mt-4 p-4 bg-blue-50 rounded-lg">
+                <h4 className="font-medium mb-2">Items found:</h4>
+                <div className="space-y-2">
+                  {extractedItems.slice(0, 5).map((item, index) => (
+                    <div key={index} className="flex justify-between text-sm">
+                      <span>{item.name}</span>
+                      <span>${item.price}</span>
+                    </div>
+                  ))}
+                  {extractedItems.length > 5 && (
+                    <div className="text-xs text-gray-500">
+                      ...and {extractedItems.length - 5} more items
+                    </div>
+                  )}
+                </div>
+              </div>
+            )}
+          </Card>
+        )}
+
         {/* Manual Entry Form */}
-        <Card className="p-6 rounded-2xl shadow-xl">
-          <h3 className="text-lg font-semibold mb-4">Expense Details</h3>
-          <div className="space-y-6">
-            <div className="grid grid-cols-1 md:grid-cols-2 gap-6">
-              <div className="space-y-2">
-                <Label htmlFor="amount" className="text-gray-700 font-medium">Amount *</Label>
-                <div className="relative">
-                  <span className="absolute left-3 top-1/2 -translate-y-1/2 text-gray-500 text-lg">$</span>
+        {entryMode === 'total' && (
+          <Card className="p-6 rounded-2xl shadow-xl">
+            <h3 className="text-lg font-semibold mb-4">Expense Details</h3>
+            <div className="space-y-6">
+              <div className="grid grid-cols-1 md:grid-cols-2 gap-6">
+                <div className="space-y-2">
+                  <Label htmlFor="amount" className="text-gray-700 font-medium">Amount *</Label>
+                  <div className="relative">
+                    <span className="absolute left-3 top-1/2 -translate-y-1/2 text-gray-500 text-lg">$</span>
+                    <Input
+                      id="amount"
+                      type="number"
+                      placeholder="0.00"
+                      value={formData.amount}
+                      onChange={(e) => setFormData(prev => ({ ...prev, amount: e.target.value }))}
+                      onFocus={() => setInputFocus('amount')}
+                      onBlur={() => setInputFocus(null)}
+                      className={`h-14 rounded-xl pl-8 text-lg font-semibold transition-all duration-150 ${inputFocus === 'amount' ? 'ring-2 ring-blue-300 shadow-md' : ''}`}
+                      step="0.01"
+                    />
+                  </div>
+                </div>
+
+                <div className="space-y-2">
+                  <Label htmlFor="title" className="text-gray-700 font-medium">Title</Label>
                   <Input
-                    id="amount"
-                    type="number"
-                    placeholder="0.00"
-                    value={formData.amount}
-                    onChange={(e) => setFormData(prev => ({ ...prev, amount: e.target.value }))}
-                    onFocus={() => setInputFocus('amount')}
-                    onBlur={() => setInputFocus(null)}
-                    className={`h-14 rounded-xl pl-8 text-lg font-semibold transition-all duration-150 ${inputFocus === 'amount' ? 'ring-2 ring-blue-300 shadow-md' : ''}`}
-                    step="0.01"
+                    id="title"
+                    placeholder="What did you buy?"
+                    value={formData.title}
+                    onChange={(e) => setFormData(prev => ({ ...prev, title: e.target.value }))}
+                    className="h-14 rounded-xl"
                   />
                 </div>
               </div>
 
-              <div className="space-y-2">
-                <Label htmlFor="title" className="text-gray-700 font-medium">Title</Label>
-                <Input
-                  id="title"
-                  placeholder="What did you buy?"
-                  value={formData.title}
-                  onChange={(e) => setFormData(prev => ({ ...prev, title: e.target.value }))}
-                  className="h-14 rounded-xl"
-                />
-              </div>
-            </div>
-
-            <div className="grid grid-cols-1 md:grid-cols-2 gap-6">
-              <div className="space-y-2">
-                <Label htmlFor="category" className="text-gray-700 font-medium">Category *</Label>
-                {categoriesLoading ? (
-                  <div className="h-14 rounded-xl border flex items-center justify-center">
-                    <span className="text-gray-500">Loading categories...</span>
-                  </div>
-                ) : categoriesError ? (
-                  <div className="h-14 rounded-xl border flex items-center justify-center">
-                    <span className="text-red-500">Error loading categories</span>
-                  </div>
-                ) : categories.length === 0 ? (
-                  <div className="space-y-2">
-                    <div className="h-14 rounded-xl border flex items-center justify-center bg-gray-50">
-                      <span className="text-gray-500">No categories available</span>
+              <div className="grid grid-cols-1 md:grid-cols-2 gap-6">
+                <div className="space-y-2">
+                  <Label htmlFor="category" className="text-gray-700 font-medium">Category *</Label>
+                  {categoriesLoading ? (
+                    <div className="h-14 rounded-xl border flex items-center justify-center">
+                      <span className="text-gray-500">Loading categories...</span>
                     </div>
-                    <Button
-                      type="button"
-                      variant="outline"
-                      onClick={handleAddCategory}
-                      className="w-full border-dashed border-2 border-blue-300 hover:border-blue-400 hover:bg-blue-50 text-blue-600 hover:text-blue-700 transition-all duration-150"
-                    >
-                      <Plus className="w-4 h-4 mr-2" />
-                      Add Category
-                    </Button>
-                  </div>
-                ) : (
-                  <Select value={formData.category_id} onValueChange={(value) => {
-                    console.log('Category selected:', value);
-                    setFormData(prev => ({ ...prev, category_id: value }));
-                  }}>
-                    <SelectTrigger className="h-14 rounded-xl">
-                      <SelectValue placeholder="Select category" />
-                    </SelectTrigger>
-                    <SelectContent className="bg-white border shadow-lg z-50">
-                      {categories.map((category) => (
-                        <SelectItem key={category.id} value={category.id.toString()}>
-                          <div className="flex items-center space-x-2">
-                            <span>{category.icon || '💰'}</span>
-                            <span>{category.name}</span>
-                          </div>
-                        </SelectItem>
-                      ))}
-                    </SelectContent>
-                  </Select>
-                )}
-              </div>
-
-              <div className="space-y-2">
-                <Label htmlFor="payment_method" className="text-gray-700 font-medium">Payment Method</Label>
-                {paymentMethodsLoading ? (
-                  <div className="h-14 rounded-xl border flex items-center justify-center">
-                    <span className="text-gray-500">Loading payment methods...</span>
-                  </div>
-                ) : paymentMethodsError ? (
-                  <div className="h-14 rounded-xl border flex items-center justify-center">
-                    <span className="text-red-500">Error loading payment methods</span>
-                  </div>
-                ) : paymentMethods.length === 0 ? (
-                  <div className="space-y-2">
-                    <div className="h-14 rounded-xl border flex items-center justify-center bg-gray-50">
-                      <span className="text-gray-500">No payment methods available</span>
+                  ) : categoriesError ? (
+                    <div className="h-14 rounded-xl border flex items-center justify-center">
+                      <span className="text-red-500">Error loading categories</span>
                     </div>
-                    <Button
-                      type="button"
-                      variant="outline"
-                      onClick={handleAddPaymentMethod}
-                      className="w-full border-dashed border-2 border-blue-300 hover:border-blue-400 hover:bg-blue-50 text-blue-600 hover:text-blue-700 transition-all duration-150"
-                    >
-                      <Plus className="w-4 h-4 mr-2" />
-                      Add Payment Method
-                    </Button>
-                  </div>
-                ) : (
-                  <Select value={formData.payment_method_id} onValueChange={(value) => {
-                    console.log('Payment method selected:', value);
-                    setFormData(prev => ({ ...prev, payment_method_id: value }));
-                  }}>
-                    <SelectTrigger className="h-14 rounded-xl">
-                      <SelectValue placeholder="Select payment method" />
-                    </SelectTrigger>
-                    <SelectContent className="bg-white border shadow-lg z-50">
-                      {paymentMethods.map((method) => (
-                        <SelectItem key={method.id} value={method.id.toString()}>
-                          {method.name} {method.last_four_digits && `****${method.last_four_digits}`}
-                        </SelectItem>
-                      ))}
-                    </SelectContent>
-                  </Select>
-                )}
+                  ) : categories.length === 0 ? (
+                    <div className="space-y-2">
+                      <div className="h-14 rounded-xl border flex items-center justify-center bg-gray-50">
+                        <span className="text-gray-500">No categories available</span>
+                      </div>
+                      <Button
+                        type="button"
+                        variant="outline"
+                        onClick={handleAddCategory}
+                        className="w-full border-dashed border-2 border-blue-300 hover:border-blue-400 hover:bg-blue-50 text-blue-600 hover:text-blue-700 transition-all duration-150"
+                      >
+                        <Plus className="w-4 h-4 mr-2" />
+                        Add Category
+                      </Button>
+                    </div>
+                  ) : (
+                    <Select value={formData.category_id} onValueChange={(value) => {
+                      console.log('Category selected:', value);
+                      setFormData(prev => ({ ...prev, category_id: value }));
+                    }}>
+                      <SelectTrigger className="h-14 rounded-xl">
+                        <SelectValue placeholder="Select category" />
+                      </SelectTrigger>
+                      <SelectContent className="bg-white border shadow-lg z-50">
+                        {categories.map((category) => (
+                          <SelectItem key={category.id} value={category.id.toString()}>
+                            <div className="flex items-center space-x-2">
+                              <span>{category.icon || '💰'}</span>
+                              <span>{category.name}</span>
+                            </div>
+                          </SelectItem>
+                        ))}
+                      </SelectContent>
+                    </Select>
+                  )}
+                </div>
+
+                <div className="space-y-2">
+                  <Label htmlFor="payment_method" className="text-gray-700 font-medium">Payment Method</Label>
+                  {paymentMethodsLoading ? (
+                    <div className="h-14 rounded-xl border flex items-center justify-center">
+                      <span className="text-gray-500">Loading payment methods...</span>
+                    </div>
+                  ) : paymentMethodsError ? (
+                    <div className="h-14 rounded-xl border flex items-center justify-center">
+                      <span className="text-red-500">Error loading payment methods</span>
+                    </div>
+                  ) : paymentMethods.length === 0 ? (
+                    <div className="space-y-2">
+                      <div className="h-14 rounded-xl border flex items-center justify-center bg-gray-50">
+                        <span className="text-gray-500">No payment methods available</span>
+                      </div>
+                      <Button
+                        type="button"
+                        variant="outline"
+                        onClick={handleAddPaymentMethod}
+                        className="w-full border-dashed border-2 border-blue-300 hover:border-blue-400 hover:bg-blue-50 text-blue-600 hover:text-blue-700 transition-all duration-150"
+                      >
+                        <Plus className="w-4 h-4 mr-2" />
+                        Add Payment Method
+                      </Button>
+                    </div>
+                  ) : (
+                    <Select value={formData.payment_method_id} onValueChange={(value) => {
+                      console.log('Payment method selected:', value);
+                      setFormData(prev => ({ ...prev, payment_method_id: value }));
+                    }}>
+                      <SelectTrigger className="h-14 rounded-xl">
+                        <SelectValue placeholder="Select payment method" />
+                      </SelectTrigger>
+                      <SelectContent className="bg-white border shadow-lg z-50">
+                        {paymentMethods.map((method) => (
+                          <SelectItem key={method.id} value={method.id.toString()}>
+                            {method.name} {method.last_four_digits && `****${method.last_four_digits}`}
+                          </SelectItem>
+                        ))}
+                      </SelectContent>
+                    </Select>
+                  )}
+                </div>
+              </div>
+
+              <div className="grid grid-cols-1 md:grid-cols-2 gap-6">
+                <div className="space-y-2">
+                  <Label htmlFor="description" className="text-gray-700 font-medium">Description</Label>
+                  <Textarea
+                    id="description"
+                    placeholder="Add a note about this expense..."
+                    value={formData.description}
+                    onChange={(e) => setFormData(prev => ({ ...prev, description: e.target.value }))}
+                    className="rounded-xl resize-none"
+                    rows={3}
+                  />
+                </div>
+
+                <div className="space-y-2">
+                  <Label htmlFor="date" className="text-gray-700 font-medium">Date</Label>
+                  <Input
+                    id="date"
+                    type="date"
+                    value={formData.date}
+                    onChange={(e) => setFormData(prev => ({ ...prev, date: e.target.value }))}
+                    className="h-14 rounded-xl"
+                  />
+                </div>
               </div>
             </div>
-
-            <div className="grid grid-cols-1 md:grid-cols-2 gap-6">
-              <div className="space-y-2">
-                <Label htmlFor="description" className="text-gray-700 font-medium">Description</Label>
-                <Textarea
-                  id="description"
-                  placeholder="Add a note about this expense..."
-                  value={formData.description}
-                  onChange={(e) => setFormData(prev => ({ ...prev, description: e.target.value }))}
-                  className="rounded-xl resize-none"
-                  rows={3}
-                />
-              </div>
-
-              <div className="space-y-2">
-                <Label htmlFor="date" className="text-gray-700 font-medium">Date</Label>
-                <Input
-                  id="date"
-                  type="date"
-                  value={formData.date}
-                  onChange={(e) => setFormData(prev => ({ ...prev, date: e.target.value }))}
-                  className="h-14 rounded-xl"
-                />
-              </div>
-            </div>
-          </div>
-        </Card>
+          </Card>
+        )}
 
         {/* Quick Amounts */}
-        <Card className="p-6 rounded-2xl shadow-xl">
-          <h3 className="text-lg font-semibold mb-4">Quick Amounts</h3>
-          <div className="grid grid-cols-3 gap-3">
-            {["5", "10", "25", "50", "100", "200"].map((amount) => (
-              <Button
-                key={amount}
-                variant="outline"
-                onClick={() => setFormData(prev => ({ ...prev, amount }))}
-                className="h-12 rounded-xl text-lg font-semibold transition-all duration-150 hover:bg-blue-50 focus:ring-2 focus:ring-blue-200"
-              >
-                ${amount}
-              </Button>
-            ))}
-          </div>
-        </Card>
+        {entryMode === 'total' && (
+          <Card className="p-6 rounded-2xl shadow-xl">
+            <h3 className="text-lg font-semibold mb-4">Quick Amounts</h3>
+            <div className="grid grid-cols-3 gap-3">
+              {["5", "10", "25", "50", "100", "200"].map((amount) => (
+                <Button
+                  key={amount}
+                  variant="outline"
+                  onClick={() => setFormData(prev => ({ ...prev, amount }))}
+                  className="h-12 rounded-xl text-lg font-semibold transition-all duration-150 hover:bg-blue-50 focus:ring-2 focus:ring-blue-200"
+                >
+                  ${amount}
+                </Button>
+              ))}
+            </div>
+          </Card>
+        )}
       </div>
       <BottomNavigation />
     </div>

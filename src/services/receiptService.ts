@@ -72,10 +72,51 @@ export const receiptService = {
       date: receiptService.extractDate(lines),
       merchant: receiptService.extractMerchant(lines),
       items: receiptService.extractItems(lines),
-      tax: receiptService.extractTax(lines)
+      tax: receiptService.extractTax(lines),
+      receiptType: receiptService.determineReceiptType(lines),
+      smartTitle: receiptService.generateSmartTitle(lines)
     };
 
     return parsed;
+  },
+
+  determineReceiptType: (lines: string[]): string => {
+    const text = lines.join(' ').toLowerCase();
+    
+    // Common store/business type indicators
+    const storeTypes = {
+      'grocery': ['grocery', 'supermarket', 'walmart', 'target', 'kroger', 'safeway', 'food', 'market'],
+      'restaurant': ['restaurant', 'cafe', 'diner', 'bistro', 'grill', 'kitchen', 'pizza', 'burger'],
+      'gas': ['gas', 'fuel', 'shell', 'exxon', 'chevron', 'bp', 'station'],
+      'pharmacy': ['pharmacy', 'cvs', 'walgreens', 'drugstore', 'medical'],
+      'retail': ['store', 'shop', 'retail', 'mall', 'outlet'],
+      'clothing': ['clothing', 'apparel', 'fashion', 'wear', 'shirt', 'pants'],
+      'electronics': ['electronics', 'tech', 'computer', 'phone', 'device'],
+      'home': ['home', 'depot', 'lowes', 'hardware', 'furniture']
+    };
+
+    for (const [type, keywords] of Object.entries(storeTypes)) {
+      if (keywords.some(keyword => text.includes(keyword))) {
+        return type;
+      }
+    }
+
+    return 'general';
+  },
+
+  generateSmartTitle: (lines: string[]): string => {
+    const merchant = receiptService.extractMerchant(lines);
+    const receiptType = receiptService.determineReceiptType(lines);
+    const total = receiptService.extractTotal(lines);
+    
+    // Generate a smart title based on merchant and type
+    if (merchant && receiptType !== 'general') {
+      return `${merchant} - ${receiptType.charAt(0).toUpperCase() + receiptType.slice(1)}`;
+    } else if (merchant) {
+      return `${merchant} Purchase`;
+    } else {
+      return `${receiptType.charAt(0).toUpperCase() + receiptType.slice(1)} Receipt`;
+    }
   },
 
   extractTotal: (lines: string[]): string | null => {
@@ -117,20 +158,33 @@ export const receiptService = {
     // Usually the first few lines contain merchant info
     for (let i = 0; i < Math.min(5, lines.length); i++) {
       const line = lines[i].trim();
-      if (line && line.length > 3 && !line.match(/^\d/)) {
+      if (line && line.length > 3 && !line.match(/^\d/) && !line.toLowerCase().includes('receipt')) {
         return line;
       }
     }
     return null;
   },
 
-  extractItems: (lines: string[]): string[] => {
-    // Look for lines that might be items (contain prices)
-    return lines.filter(line => 
-      line.trim() && 
-      line.match(/\d+\.?\d*/) && 
-      line.length > 5
-    ).slice(0, 10); // Limit to first 10 items
+  extractItems: (lines: string[]): any[] => {
+    // Look for lines that might be items (contain prices and product names)
+    const items = [];
+    const itemPattern = /^(.+?)\s+(\d+\.?\d*)$/;
+    
+    for (const line of lines) {
+      const trimmed = line.trim();
+      if (trimmed && trimmed.length > 5) {
+        const match = trimmed.match(itemPattern);
+        if (match && !trimmed.toLowerCase().includes('total') && !trimmed.toLowerCase().includes('tax')) {
+          items.push({
+            name: match[1].trim(),
+            price: parseFloat(match[2]),
+            rawLine: trimmed
+          });
+        }
+      }
+    }
+    
+    return items.slice(0, 10); // Limit to first 10 items
   },
 
   extractTax: (lines: string[]): string | null => {
