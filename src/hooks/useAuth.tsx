@@ -43,7 +43,9 @@ export const AuthProvider = ({ children }: { children: ReactNode }) => {
     try {
       setLoading(true);
       const response = await authService.login(email, password);
-      setUser(response.user);
+      // Always fetch the user from backend after login
+      const currentUser = await authService.getCurrentUser();
+      setUser(currentUser);
       toast({
         title: "Login Successful",
         description: "Welcome back to Fluxpense!",
@@ -64,7 +66,9 @@ export const AuthProvider = ({ children }: { children: ReactNode }) => {
     try {
       setLoading(true);
       const response = await authService.signup(name, email, password);
-      setUser(response.user);
+      // Always fetch the user from backend after signup
+      const currentUser = await authService.getCurrentUser();
+      setUser(currentUser);
       toast({
         title: "Account Created!",
         description: "Welcome to Fluxpense! Let's set up your profile.",

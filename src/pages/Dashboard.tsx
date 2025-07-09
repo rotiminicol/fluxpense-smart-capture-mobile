@@ -17,12 +17,33 @@ import { useToast } from "@/hooks/use-toast";
 
 const Dashboard = () => {
   const navigate = useNavigate();
-  const { user } = useAuth();
+  const { user, loading } = useAuth();
   const { toast } = useToast();
   const [selectedMonth, setSelectedMonth] = useState("February");
 
   // Debug log for user object
   console.log("USER FROM useAuth", user);
+
+  // Only render after loading is false
+  if (loading) {
+    return (
+      <div className="min-h-screen bg-gradient-to-br from-blue-50 to-indigo-100 flex items-center justify-center">
+        <div className="animate-spin rounded-full h-12 w-12 border-b-2 border-blue-600"></div>
+      </div>
+    );
+  }
+
+  if (!user) {
+    return (
+      <div className="min-h-screen flex items-center justify-center bg-gradient-to-br from-blue-50 to-indigo-100">
+        <div className="bg-white p-8 rounded-xl shadow-xl text-center">
+          <h2 className="text-xl font-bold text-red-600 mb-4">User not loaded</h2>
+          <p className="text-gray-700 mb-2">We could not load your user information. Please log in again.</p>
+          <Button onClick={() => navigate("/login")}>Go to Login</Button>
+        </div>
+      </div>
+    );
+  }
 
   // Fetch transactions
   const { data: transactions = [], isLoading: transactionsLoading } = useQuery({
@@ -118,14 +139,6 @@ const Dashboard = () => {
     });
   };
 
-  if (transactionsLoading || categoriesLoading || notificationsLoading) {
-    return (
-      <div className="min-h-screen bg-gradient-to-br from-blue-50 to-indigo-100 flex items-center justify-center">
-        <div className="animate-spin rounded-full h-12 w-12 border-b-2 border-blue-600"></div>
-      </div>
-    );
-  }
-
   return (
     <div className="min-h-screen bg-gradient-to-br from-blue-50 to-indigo-100 pb-20">
       {/* Header */}
@@ -134,8 +147,20 @@ const Dashboard = () => {
           <div>
             <h1 className="text-2xl font-bold text-gray-900">Welcome back!</h1>
             <p className="text-gray-600">
-              {user?.email || user?.name || (user ? JSON.stringify(user) : 'User')}
+              {user?.email ||
+                (user && (user as any).username) ||
+                (user && (user as any).user_email) ||
+                (user && (user as any).email_address) ||
+                (user && (user as any).emailAddress) ||
+                (user && (user as any).contact_email) ||
+                user?.name ||
+                (user ? JSON.stringify(user, null, 2) : 'User')}
             </p>
+            {!user?.email && (
+              <div className="text-red-600 text-xs mt-2">
+                Warning: No user email found. Please check your backend /auth/me response.
+              </div>
+            )}
           </div>
           <div className="flex items-center space-x-4">
             <Popover>

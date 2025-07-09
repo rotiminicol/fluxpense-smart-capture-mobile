@@ -76,31 +76,28 @@ const AddExpense = () => {
     if (file) {
       setFormData(prev => ({ ...prev, receipt: file, receiptUrl: URL.createObjectURL(file) }));
       setIsScanning(true);
-      
       try {
-        const result = await receiptService.processReceiptWithMindee(file);
-        
-        // Extract data from Mindee response
-        if (result.document && result.document.inference && result.document.inference.prediction) {
-          const prediction = result.document.inference.prediction;
-          
+        const result = await receiptService.processReceiptWithOCR(file);
+        console.log('OCR Result:', result);
+        // Improved auto-fill logic
+        if (result.parsed) {
           setFormData(prev => ({
             ...prev,
-            amount: prediction.total_amount?.value?.toString() || prev.amount,
-            title: prediction.supplier_name?.value || "Receipt Transaction",
-            description: `Receipt from ${prediction.supplier_name?.value || 'Store'}`,
+            amount: result.parsed.total || prev.amount,
+            title: result.parsed.merchant || prev.title || 'Receipt',
+            description: result.parsed.merchant ? `Receipt from ${result.parsed.merchant}` : prev.description,
+            date: result.parsed.date || prev.date,
           }));
-          
-          toast({
-            title: "Receipt Scanned!",
-            description: "Details extracted successfully. Please review and save.",
-          });
         }
-      } catch (error) {
+        toast({
+          title: "Scan Successful!",
+          description: "Receipt processed successfully. Form auto-filled with extracted data.",
+        });
+      } catch (error: any) {
         console.error('Receipt processing failed:', error);
         toast({
           title: "Scan Failed",
-          description: "Could not process receipt. Please enter details manually.",
+          description: error?.message || (typeof error === 'string' ? error : JSON.stringify(error)) || "Could not process receipt. Please enter details manually.",
           variant: "destructive",
         });
       } finally {
@@ -163,7 +160,13 @@ const AddExpense = () => {
           <Button
             variant="ghost"
             size="icon"
-            onClick={() => navigate(-1)}
+            onClick={() => {
+              if (window.history.length > 2) {
+                navigate(-1);
+              } else {
+                navigate('/dashboard');
+              }
+            }}
             className="w-11 h-11 rounded-full bg-white/80 shadow-lg border border-blue-100 hover:bg-blue-50 text-blue-600 flex items-center justify-center transition-all duration-200"
             aria-label="Back"
           >
