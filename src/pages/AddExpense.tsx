@@ -476,11 +476,26 @@ const AddExpense = () => {
                     <div className="h-14 rounded-xl border flex items-center justify-center">
                       <span className="text-red-500">Error loading categories</span>
                     </div>
-                  ) : categories.length === 0 ? (
-                    <div className="space-y-2">
-                      <div className="h-14 rounded-xl border flex items-center justify-center bg-gray-50">
-                        <span className="text-gray-500">No categories available</span>
-                      </div>
+                  ) : (
+                    <div className="space-y-3">
+                      <Select value={formData.category_id} onValueChange={(value) => {
+                        console.log('Category selected:', value);
+                        setFormData(prev => ({ ...prev, category_id: value }));
+                      }}>
+                        <SelectTrigger className="h-14 rounded-xl">
+                          <SelectValue placeholder={categories.length === 0 ? "No categories available" : "Select category"} />
+                        </SelectTrigger>
+                        <SelectContent className="bg-white border shadow-lg z-50">
+                          {categories.map((category) => (
+                            <SelectItem key={category.id} value={category.id.toString()}>
+                              <div className="flex items-center space-x-2">
+                                <span>{category.icon || '💰'}</span>
+                                <span>{category.name}</span>
+                              </div>
+                            </SelectItem>
+                          ))}
+                        </SelectContent>
+                      </Select>
                       <Button
                         type="button"
                         variant="outline"
@@ -491,25 +506,6 @@ const AddExpense = () => {
                         Add Category
                       </Button>
                     </div>
-                  ) : (
-                    <Select value={formData.category_id} onValueChange={(value) => {
-                      console.log('Category selected:', value);
-                      setFormData(prev => ({ ...prev, category_id: value }));
-                    }}>
-                      <SelectTrigger className="h-14 rounded-xl">
-                        <SelectValue placeholder="Select category" />
-                      </SelectTrigger>
-                      <SelectContent className="bg-white border shadow-lg z-50">
-                        {categories.map((category) => (
-                          <SelectItem key={category.id} value={category.id.toString()}>
-                            <div className="flex items-center space-x-2">
-                              <span>{category.icon || '💰'}</span>
-                              <span>{category.name}</span>
-                            </div>
-                          </SelectItem>
-                        ))}
-                      </SelectContent>
-                    </Select>
                   )}
                 </div>
 
@@ -523,11 +519,23 @@ const AddExpense = () => {
                     <div className="h-14 rounded-xl border flex items-center justify-center">
                       <span className="text-red-500">Error loading payment methods</span>
                     </div>
-                  ) : paymentMethods.length === 0 ? (
-                    <div className="space-y-2">
-                      <div className="h-14 rounded-xl border flex items-center justify-center bg-gray-50">
-                        <span className="text-gray-500">No payment methods available</span>
-                      </div>
+                  ) : (
+                    <div className="space-y-3">
+                      <Select value={formData.payment_method_id} onValueChange={(value) => {
+                        console.log('Payment method selected:', value);
+                        setFormData(prev => ({ ...prev, payment_method_id: value }));
+                      }}>
+                        <SelectTrigger className="h-14 rounded-xl">
+                          <SelectValue placeholder={paymentMethods.length === 0 ? "No payment methods available" : "Select payment method"} />
+                        </SelectTrigger>
+                        <SelectContent className="bg-white border shadow-lg z-50">
+                          {paymentMethods.map((method) => (
+                            <SelectItem key={method.id} value={method.id.toString()}>
+                              {method.name} {method.last_four_digits && `****${method.last_four_digits}`}
+                            </SelectItem>
+                          ))}
+                        </SelectContent>
+                      </Select>
                       <Button
                         type="button"
                         variant="outline"
@@ -538,22 +546,6 @@ const AddExpense = () => {
                         Add Payment Method
                       </Button>
                     </div>
-                  ) : (
-                    <Select value={formData.payment_method_id} onValueChange={(value) => {
-                      console.log('Payment method selected:', value);
-                      setFormData(prev => ({ ...prev, payment_method_id: value }));
-                    }}>
-                      <SelectTrigger className="h-14 rounded-xl">
-                        <SelectValue placeholder="Select payment method" />
-                      </SelectTrigger>
-                      <SelectContent className="bg-white border shadow-lg z-50">
-                        {paymentMethods.map((method) => (
-                          <SelectItem key={method.id} value={method.id.toString()}>
-                            {method.name} {method.last_four_digits && `****${method.last_four_digits}`}
-                          </SelectItem>
-                        ))}
-                      </SelectContent>
-                    </Select>
                   )}
                 </div>
               </div>

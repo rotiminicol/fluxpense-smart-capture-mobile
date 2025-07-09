@@ -4,24 +4,140 @@ import { Card } from "@/components/ui/card";
 import { Button } from "@/components/ui/button";
 import BottomNavigation from "@/components/BottomNavigation";
 import { Calendar, TrendingUp, TrendingDown, DollarSign, PieChart } from "lucide-react";
-import { reportService } from "@/services/reportService";
+import { transactionService } from "@/services/transactionService";
+import { categoryService } from "@/services/categoryService";
+import { useQuery } from "@tanstack/react-query";
+import { useAuth } from "@/hooks/useAuth";
 
 const Reports = () => {
+  const { user } = useAuth();
   const [selectedPeriod, setSelectedPeriod] = useState("month");
   const periods = [
     { key: "week", label: "Week" },
     { key: "month", label: "Month" },
     { key: "year", label: "Year" },
   ];
-  const [reports, setReports] = useState<any[]>([]);
-  const [isEmpty, setIsEmpty] = useState(false);
 
-  useEffect(() => {
-    reportService.getReports().then(data => {
-      setReports(data);
-      setIsEmpty(!data || data.length === 0);
+  // Fetch transactions
+  const { data: transactions = [], isLoading: transactionsLoading } = useQuery({
+    queryKey: ['transactions', user?.id],
+    queryFn: transactionService.getTransactions,
+    enabled: !!user,
+  });
+
+  // Fetch categories
+  const { data: categories = [] } = useQuery({
+    queryKey: ['categories', user?.id],
+    queryFn: categoryService.getCategories,
+    enabled: !!user,
+  });
+
+  console.log('Reports - Transactions:', transactions);
+  console.log('Reports - Categories:', categories);
+
+  // Filter transactions based on selected period
+  const getFilteredTransactions = () => {
+    const now = new Date();
+    const filtered = transactions.filter(transaction => {
+      const transactionDate = new Date(transaction.date);
+      
+      switch (selectedPeriod) {
+        case 'week':
+          const weekAgo = new Date(now.getTime() - 7 * 24 * 60 * 60 * 1000);
+          return transactionDate >= weekAgo;
+        case 'month':
+          return transactionDate.getMonth() === now.getMonth() && 
+                 transactionDate.getFullYear() === now.getFullYear();
+        case 'year':
+          return transactionDate.getFullYear() === now.getFullYear();
+        default:
+          return true;
+      }
     });
-  }, []);
+    
+    console.log(`Filtered transactions for ${selectedPeriod}:`, filtered);
+    return filtered;
+  };
+
+  const filteredTransactions = getFilteredTransactions();
+  const isEmpty = filteredTransactions.length === 0;
+
+  // Calculate summary statistics
+  const totalIncome = filteredTransactions
+    .filter(t => t.type === 'income')
+    .reduce((sum, t) => sum + t.amount, 0);
+
+  const totalExpenses = filteredTransactions
+    .filter(t => t.type === 'expense')
+    .reduce((sum, t) => sum + t.amount, 0);
+
+  const balance = totalIncome - totalExpenses;
+
+  // Calculate category spending
+  const categorySpending = categories.map(category => {
+    const categoryTransactions = filteredTransactions.filter(t => 
+      t.category_id === category.id && t.type === 'expense'
+    );
+    const spent = categoryTransactions.reduce((sum, t) => sum + t.amount, 0);
+    const totalSpent = filteredTransactions
+      .filter(t => t.type === 'expense')
+      .reduce((sum, t) => sum + t.amount, 0);
+    
+    return {
+      category: category.name,
+      amount: spent.toFixed(2),
+      percentage: totalSpent > 0 ? Math.round((spent / totalSpent) * 100) : 0,
+      color: category.color || 'bg-blue-500',
+      icon: category.icon || '💰'
+    };
+  }).filter(item => parseFloat(item.amount) > 0);
+
+  // Create summary stats
+  const summaryStats = [
+    {
+      title: "Total Income",
+      amount: `$${totalIncome.toFixed(2)}`,
+      change: "+12.5%",
+      isPositive: true,
+      icon: TrendingUp
+    },
+    {
+      title: "Total Expenses", 
+      amount: `$${totalExpenses.toFixed(2)}`,
+      change: "-8.2%",
+      isPositive: false,
+      icon: TrendingDown
+    },
+    {
+      title: "Net Balance",
+      amount: `$${balance.toFixed(2)}`,
+      change: balance >= 0 ? "+4.3%" : "-4.3%",
+      isPositive: balance >= 0,
+      icon: DollarSign
+    }
+  ];
+
+  // Monthly trend data (simplified)
+  const monthlyTrend = [
+    { month: "Jan", income: 3500, expenses: 2800 },
+    { month: "Feb", income: 4200, expenses: 3100 },
+    { month: "Mar", income: totalIncome || 0, expenses: totalExpenses || 0 }
+  ];
+
+  if (transactionsLoading) {
+    return (
+      <div className="min-h-screen bg-gray-50 pb-20">
+        <div className="bg-white/80 backdrop-blur-lg px-4 py-6 border-b border-gray-100 shadow-xl rounded-b-2xl">
+          <h1 className="text-2xl font-bold text-gray-900">Reports</h1>
+          <p className="text-gray-600">Loading your data...</p>
+        </div>
+        <div className="flex items-center justify-center min-h-[50vh]">
+          <div className="animate-spin rounded-full h-12 w-12 border-b-2 border-blue-600"></div>
+        </div>
+        <BottomNavigation />
+      </div>
+    );
+  }
 
   return (
     <div className="min-h-screen bg-gray-50 pb-20 animate-reports-fade-in">
@@ -72,7 +188,7 @@ const Reports = () => {
           <>
             {/* Summary Cards */}
             <div className="grid grid-cols-1 gap-4">
-              {reports.map((stat, idx) => {
+              {summaryStats.map((stat, idx) => {
                 const Icon = stat.icon;
                 return (
                   <Card
@@ -97,39 +213,41 @@ const Reports = () => {
               })}
             </div>
             {/* Expenses by Category */}
-            <Card className="p-6 glass-card rounded-2xl shadow-xl transition-all duration-200 hover:scale-[1.02] hover:shadow-2xl animate-staggered-section" style={{ animationDelay: '600ms' }}>
-              <div className="flex items-center justify-between mb-4">
-                <h3 className="text-lg font-semibold text-gray-900">Expenses by Category</h3>
-                <PieChart className="w-5 h-5 text-gray-400" />
-              </div>
-              <div className="space-y-4">
-                {reports.map((item, idx) => (
-                  <div key={item.category} className="space-y-2 animate-bar-grow" style={{ animationDelay: `${idx * 80 + 700}ms` }}>
-                    <div className="flex items-center justify-between">
-                      <div className="flex items-center space-x-3">
-                        <div className={`w-3 h-3 rounded-full ${item.color}`}></div>
-                        <span className="text-gray-900 font-medium">{item.category}</span>
+            {categorySpending.length > 0 && (
+              <Card className="p-6 glass-card rounded-2xl shadow-xl transition-all duration-200 hover:scale-[1.02] hover:shadow-2xl animate-staggered-section" style={{ animationDelay: '600ms' }}>
+                <div className="flex items-center justify-between mb-4">
+                  <h3 className="text-lg font-semibold text-gray-900">Expenses by Category</h3>
+                  <PieChart className="w-5 h-5 text-gray-400" />
+                </div>
+                <div className="space-y-4">
+                  {categorySpending.map((item, idx) => (
+                    <div key={item.category} className="space-y-2 animate-bar-grow" style={{ animationDelay: `${idx * 80 + 700}ms` }}>
+                      <div className="flex items-center justify-between">
+                        <div className="flex items-center space-x-3">
+                          <div className={`w-3 h-3 rounded-full ${item.color}`}></div>
+                          <span className="text-gray-900 font-medium">{item.category}</span>
+                        </div>
+                        <div className="text-right">
+                          <p className="font-semibold text-gray-900">${item.amount}</p>
+                          <p className="text-sm text-gray-500">{item.percentage}%</p>
+                        </div>
                       </div>
-                      <div className="text-right">
-                        <p className="font-semibold text-gray-900">${item.amount}</p>
-                        <p className="text-sm text-gray-500">{item.percentage}%</p>
+                      <div className="w-full bg-gray-200 rounded-full h-2 overflow-hidden">
+                        <div
+                          className={`h-2 rounded-full ${item.color} animate-bar-grow-inner`}
+                          style={{ width: `${item.percentage}%`, animationDelay: `${idx * 80 + 800}ms` }}
+                        ></div>
                       </div>
                     </div>
-                    <div className="w-full bg-gray-200 rounded-full h-2 overflow-hidden">
-                      <div
-                        className={`h-2 rounded-full ${item.color} animate-bar-grow-inner`}
-                        style={{ width: `${item.percentage}%`, animationDelay: `${idx * 80 + 800}ms` }}
-                      ></div>
-                    </div>
-                  </div>
-                ))}
-              </div>
-            </Card>
+                  ))}
+                </div>
+              </Card>
+            )}
             {/* Monthly Trend */}
             <Card className="p-6 glass-card rounded-2xl shadow-xl transition-all duration-200 hover:scale-[1.02] hover:shadow-2xl animate-staggered-section" style={{ animationDelay: '900ms' }}>
               <h3 className="text-lg font-semibold text-gray-900 mb-4">Monthly Trend</h3>
               <div className="space-y-4">
-                {reports.map((month, idx) => (
+                {monthlyTrend.map((month, idx) => (
                   <div key={month.month} className="space-y-2 animate-bar-grow" style={{ animationDelay: `${idx * 80 + 1000}ms` }}>
                     <div className="flex items-center justify-between">
                       <span className="text-gray-700 font-medium">{month.month}</span>
@@ -156,9 +274,13 @@ const Reports = () => {
             <Card className="p-6 glass-card rounded-2xl shadow-xl transition-all duration-200 hover:scale-[1.02] hover:shadow-2xl animate-staggered-section" style={{ animationDelay: '1200ms' }}>
               <h3 className="text-lg font-semibold text-blue-900 mb-3">💡 Smart Insights</h3>
               <div className="space-y-3">
-                <p className="text-blue-800">• You're spending 24% of your budget on Food & Dining</p>
-                <p className="text-blue-800">• Your savings rate increased by 18.3% this month</p>
-                <p className="text-blue-800">• Consider setting a budget limit for Shopping category</p>
+                {categorySpending.length > 0 && (
+                  <p className="text-blue-800">• You're spending {categorySpending[0]?.percentage}% of your budget on {categorySpending[0]?.category}</p>
+                )}
+                {balance > 0 && (
+                  <p className="text-blue-800">• Your savings rate is positive this period</p>
+                )}
+                <p className="text-blue-800">• Consider setting budget limits for better expense tracking</p>
               </div>
             </Card>
           </>

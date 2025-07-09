@@ -1,3 +1,4 @@
+
 import { useState, useEffect } from "react";
 import { useNavigate } from "react-router-dom";
 import { Button } from "@/components/ui/button";
@@ -25,14 +26,31 @@ const Dashboard = () => {
   console.log("USER FROM useAuth", user);
   console.log("CRITICAL DEBUG: Current user ID for data isolation:", user?.id);
 
-  // Force refresh queries when component mounts
+  // Force refresh queries when component mounts and invalidate stale data
   useEffect(() => {
     if (user) {
       console.log("Dashboard mounted for user:", user.id, user.email);
-      // Invalidate and refetch all queries to ensure fresh data
-      queryClient.invalidateQueries({ queryKey: ['transactions'] });
-      queryClient.invalidateQueries({ queryKey: ['categories'] });
-      queryClient.invalidateQueries({ queryKey: ['notifications'] });
+      // Force immediate refetch of all queries with fresh data
+      const refetchQueries = async () => {
+        try {
+          await Promise.all([
+            queryClient.invalidateQueries({ queryKey: ['transactions'] }),
+            queryClient.invalidateQueries({ queryKey: ['categories'] }),
+            queryClient.invalidateQueries({ queryKey: ['notifications'] }),
+          ]);
+          
+          // Force immediate refetch
+          await Promise.all([
+            queryClient.refetchQueries({ queryKey: ['transactions'] }),
+            queryClient.refetchQueries({ queryKey: ['categories'] }),
+            queryClient.refetchQueries({ queryKey: ['notifications'] }),
+          ]);
+        } catch (error) {
+          console.error('Failed to refresh queries:', error);
+        }
+      };
+      
+      refetchQueries();
     }
   }, [user, queryClient]);
 
@@ -57,7 +75,7 @@ const Dashboard = () => {
     );
   }
 
-  // Fetch transactions with proper error handling and user isolation debugging
+  // Fetch transactions with aggressive caching disabled and user isolation debugging
   const { data: transactions = [], isLoading: transactionsLoading, error: transactionsError } = useQuery({
     queryKey: ['transactions', user.id], // Include user ID in query key for isolation
     queryFn: async () => {
@@ -84,14 +102,16 @@ const Dashboard = () => {
       return data;
     },
     enabled: !!user,
-    staleTime: 0, // Always refetch to ensure fresh data
-    refetchOnMount: true,
+    staleTime: 0, // Disable stale time to always refetch
+    gcTime: 0, // Don't cache data
+    refetchOnMount: 'always',
     refetchOnWindowFocus: true,
+    refetchOnReconnect: true,
   });
 
-  // Fetch categories with user isolation debugging
+  // Fetch categories with user isolation debugging and no caching
   const { data: categories = [], isLoading: categoriesLoading } = useQuery({
-    queryKey: ['categories', user.id], // Include user ID in query key for isolation
+    queryKey: ['categories', user.id], 
     queryFn: async () => {
       console.log("FETCHING CATEGORIES for user:", user.id, user.email);
       const data = await categoryService.getCategories();
@@ -111,19 +131,22 @@ const Dashboard = () => {
     },
     enabled: !!user,
     staleTime: 0,
-    refetchOnMount: true,
+    gcTime: 0,
+    refetchOnMount: 'always',
+    refetchOnWindowFocus: true,
   });
 
-  // Fetch notifications
+  // Fetch notifications with no caching
   const { data: notifications = [], isLoading: notificationsLoading } = useQuery({
-    queryKey: ['notifications', user.id], // Include user ID in query key for isolation
+    queryKey: ['notifications', user.id], 
     queryFn: async () => {
       console.log("FETCHING NOTIFICATIONS for user:", user.id, user.email);
       return notificationService.getNotifications();
     },
     enabled: !!user,
     staleTime: 0,
-    refetchOnMount: true,
+    gcTime: 0,
+    refetchOnMount: 'always',
   });
 
   // Show error state if there are critical errors
@@ -205,8 +228,8 @@ const Dashboard = () => {
     });
   };
 
-  // Show loading state while any critical data is loading
-  if (transactionsLoading || categoriesLoading || notificationsLoading) {
+  // Show loading state while any critical data is loading but only initially
+  if ((transactionsLoading || categoriesLoading || notificationsLoading) && transactions.length === 0) {
     return (
       <div className="min-h-screen bg-gradient-to-br from-blue-50 to-indigo-100 pb-20">
         <div className="bg-white/90 backdrop-blur-lg px-6 py-6 rounded-b-3xl shadow-xl">
