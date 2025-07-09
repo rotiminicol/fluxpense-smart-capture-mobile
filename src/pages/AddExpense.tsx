@@ -8,7 +8,7 @@ import { Textarea } from "@/components/ui/textarea";
 import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from "@/components/ui/select";
 import { Card } from "@/components/ui/card";
 import BottomNavigation from "@/components/BottomNavigation";
-import { ArrowLeft, Camera, Upload, Scan } from "lucide-react";
+import { ArrowLeft, Camera, Upload, Scan, Plus } from "lucide-react";
 import { useToast } from "@/hooks/use-toast";
 import { useAuth } from "@/hooks/useAuth";
 import { transactionService } from "@/services/transactionService";
@@ -77,56 +77,65 @@ const AddExpense = () => {
     },
   });
 
-  const handleReceiptUpload = async (event: React.ChangeEvent<HTMLInputElement>) => {
-    const file = event.target.files?.[0];
-    if (file) {
-      setFormData(prev => ({ ...prev, receipt: file, receiptUrl: URL.createObjectURL(file) }));
-      setIsScanning(true);
-      try {
-        const result = await receiptService.processReceiptWithOCR(file);
-        console.log('OCR Result:', result);
-        // Improved auto-fill logic
-        if (result.parsed) {
-          setFormData(prev => ({
-            ...prev,
-            amount: result.parsed.total || prev.amount,
-            title: result.parsed.merchant || prev.title || 'Receipt',
-            description: result.parsed.merchant ? `Receipt from ${result.parsed.merchant}` : prev.description,
-            date: result.parsed.date || prev.date,
-          }));
-        }
+  const handleReceiptUpload = async (file: File) => {
+    if (!file) return;
+
+    console.log('Processing receipt file:', file.name, file.type, file.size);
+    setFormData(prev => ({ ...prev, receipt: file, receiptUrl: URL.createObjectURL(file) }));
+    setIsScanning(true);
+    
+    try {
+      const result = await receiptService.processReceiptWithOCR(file);
+      console.log('OCR Result:', result);
+      
+      if (result && result.parsed) {
+        setFormData(prev => ({
+          ...prev,
+          amount: result.parsed.total || prev.amount,
+          title: result.parsed.merchant || prev.title || 'Receipt',
+          description: result.parsed.merchant ? `Receipt from ${result.parsed.merchant}` : prev.description,
+          date: result.parsed.date || prev.date,
+        }));
+        
         toast({
           title: "Scan Successful!",
           description: "Receipt processed successfully. Form auto-filled with extracted data.",
         });
-      } catch (error: any) {
-        console.error('Receipt processing failed:', error);
+      } else {
         toast({
-          title: "Scan Failed",
-          description: error?.message || "Could not process receipt. Please enter details manually.",
-          variant: "destructive",
+          title: "Partial Success",
+          description: "Receipt uploaded but couldn't extract all data. Please fill manually.",
         });
-      } finally {
-        setIsScanning(false);
       }
+    } catch (error: any) {
+      console.error('Receipt processing failed:', error);
+      toast({
+        title: "Upload Successful",
+        description: "Receipt uploaded, but auto-extraction failed. Please enter details manually.",
+      });
+    } finally {
+      setIsScanning(false);
     }
   };
 
+  const handleFileChange = (event: React.ChangeEvent<HTMLInputElement>) => {
+    const file = event.target.files?.[0];
+    if (file) {
+      handleReceiptUpload(file);
+    }
+    // Reset the input value so the same file can be selected again
+    event.target.value = '';
+  };
+
   const handleCameraCapture = () => {
-    if (navigator.mediaDevices && navigator.mediaDevices.getUserMedia) {
-      navigator.mediaDevices.getUserMedia({ video: true })
-        .then(() => {
-          cameraInputRef.current?.click();
-        })
-        .catch(() => {
-          toast({
-            title: "Camera Access Denied",
-            description: "Please allow camera access to take photos of receipts.",
-            variant: "destructive",
-          });
-        });
-    } else {
-      cameraInputRef.current?.click();
+    if (cameraInputRef.current) {
+      cameraInputRef.current.click();
+    }
+  };
+
+  const handleUploadClick = () => {
+    if (uploadInputRef.current) {
+      uploadInputRef.current.click();
     }
   };
 
@@ -168,6 +177,14 @@ const AddExpense = () => {
       console.error('Navigation error:', error);
       window.location.href = '/dashboard';
     }
+  };
+
+  const handleAddCategory = () => {
+    navigate('/categories');
+  };
+
+  const handleAddPaymentMethod = () => {
+    navigate('/payment-methods');
   };
 
   return (
@@ -212,8 +229,8 @@ const AddExpense = () => {
                   <div className="bg-green-100 text-green-600 rounded-full w-12 h-12 flex items-center justify-center mx-auto">
                     <Scan className="w-6 h-6" />
                   </div>
-                  <p className="text-gray-900 font-medium">Receipt scanned successfully!</p>
-                  <p className="text-sm text-gray-500">Details have been extracted automatically</p>
+                  <p className="text-gray-900 font-medium">Receipt uploaded successfully!</p>
+                  <p className="text-sm text-gray-500">Details extracted automatically</p>
                   {formData.receiptUrl && (
                     <img
                       src={formData.receiptUrl}
@@ -243,9 +260,8 @@ const AddExpense = () => {
                   type="file"
                   accept="image/*"
                   capture="environment"
-                  onChange={handleReceiptUpload}
+                  onChange={handleFileChange}
                   className="hidden"
-                  id="camera-input"
                   ref={cameraInputRef}
                 />
                 <Button
@@ -262,16 +278,15 @@ const AddExpense = () => {
                 <input
                   type="file"
                   accept="image/*"
-                  onChange={handleReceiptUpload}
+                  onChange={handleFileChange}
                   className="hidden"
-                  id="upload-input"
                   ref={uploadInputRef}
                 />
                 <Button
                   type="button"
                   variant="outline"
                   className="w-full border-blue-600 text-blue-600 hover:bg-blue-50 transition-all duration-150 focus:ring-2 focus:ring-blue-200"
-                  onClick={() => uploadInputRef.current?.click()}
+                  onClick={handleUploadClick}
                 >
                   <Upload className="w-4 h-4 mr-2" />
                   Upload
@@ -327,6 +342,16 @@ const AddExpense = () => {
                   <div className="h-14 rounded-xl border flex items-center justify-center">
                     <span className="text-red-500">Error loading categories</span>
                   </div>
+                ) : categories.length === 0 ? (
+                  <Button
+                    type="button"
+                    variant="outline"
+                    onClick={handleAddCategory}
+                    className="w-full h-14 rounded-xl border-dashed border-2 border-gray-300 hover:border-blue-400 hover:bg-blue-50 text-gray-600 hover:text-blue-600 transition-all duration-150"
+                  >
+                    <Plus className="w-4 h-4 mr-2" />
+                    Add Category
+                  </Button>
                 ) : (
                   <Select value={formData.category_id} onValueChange={(value) => {
                     console.log('Category selected:', value);
@@ -335,7 +360,7 @@ const AddExpense = () => {
                     <SelectTrigger className="h-14 rounded-xl">
                       <SelectValue placeholder="Select category" />
                     </SelectTrigger>
-                    <SelectContent className="bg-white border shadow-lg">
+                    <SelectContent className="bg-white border shadow-lg z-50">
                       {categories.map((category) => (
                         <SelectItem key={category.id} value={category.id.toString()}>
                           <div className="flex items-center space-x-2">
@@ -359,6 +384,16 @@ const AddExpense = () => {
                   <div className="h-14 rounded-xl border flex items-center justify-center">
                     <span className="text-red-500">Error loading payment methods</span>
                   </div>
+                ) : paymentMethods.length === 0 ? (
+                  <Button
+                    type="button"
+                    variant="outline"
+                    onClick={handleAddPaymentMethod}
+                    className="w-full h-14 rounded-xl border-dashed border-2 border-gray-300 hover:border-blue-400 hover:bg-blue-50 text-gray-600 hover:text-blue-600 transition-all duration-150"
+                  >
+                    <Plus className="w-4 h-4 mr-2" />
+                    Add Payment Method
+                  </Button>
                 ) : (
                   <Select value={formData.payment_method_id} onValueChange={(value) => {
                     console.log('Payment method selected:', value);
@@ -367,7 +402,7 @@ const AddExpense = () => {
                     <SelectTrigger className="h-14 rounded-xl">
                       <SelectValue placeholder="Select payment method" />
                     </SelectTrigger>
-                    <SelectContent className="bg-white border shadow-lg">
+                    <SelectContent className="bg-white border shadow-lg z-50">
                       {paymentMethods.map((method) => (
                         <SelectItem key={method.id} value={method.id.toString()}>
                           {method.name} {method.last_four_digits && `****${method.last_four_digits}`}

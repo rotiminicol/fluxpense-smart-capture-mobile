@@ -13,9 +13,19 @@ export const API_CONFIG = {
 // Token management
 export const tokenManager = {
   getToken: () => localStorage.getItem('auth_token'),
-  setToken: (token: string) => localStorage.setItem('auth_token', token),
-  removeToken: () => localStorage.removeItem('auth_token'),
-  isAuthenticated: () => !!localStorage.getItem('auth_token'),
+  setToken: (token: string) => {
+    localStorage.setItem('auth_token', token);
+    console.log('Token stored:', token.substring(0, 20) + '...');
+  },
+  removeToken: () => {
+    localStorage.removeItem('auth_token');
+    console.log('Token removed');
+  },
+  isAuthenticated: () => {
+    const token = localStorage.getItem('auth_token');
+    console.log('Checking authentication, token exists:', !!token);
+    return !!token;
+  },
 };
 
 // Base API client
@@ -33,6 +43,9 @@ class ApiClient {
     const url = `${this.baseUrl}/${endpoint}`;
     const token = tokenManager.getToken();
 
+    console.log(`API Request: ${options.method || 'GET'} ${url}`);
+    console.log('Token available:', !!token);
+
     const config: RequestInit = {
       headers: {
         'Content-Type': 'application/json',
@@ -45,12 +58,25 @@ class ApiClient {
     try {
       const response = await fetch(url, config);
       
+      console.log(`API Response: ${response.status} for ${url}`);
+      
       if (!response.ok) {
         const errorData = await response.json().catch(() => ({}));
+        console.error('API Error:', errorData);
+        
+        // If unauthorized, clear token and redirect to login
+        if (response.status === 401 || response.status === 403) {
+          tokenManager.removeToken();
+          window.location.href = '/login';
+          throw new Error('Authentication expired. Please login again.');
+        }
+        
         throw new Error(errorData.message || `HTTP error! status: ${response.status}`);
       }
 
-      return await response.json();
+      const responseData = await response.json();
+      console.log('API Response Data:', responseData);
+      return responseData;
     } catch (error) {
       console.error('API request failed:', error);
       throw error;

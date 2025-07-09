@@ -1,19 +1,19 @@
-
 // User Types
 export interface User {
   id: number;
-  created_at: string;
+  created_at: number;
   name: string;
   email: string;
-  first_name: string;
-  last_name: string;
-  profile_picture: string;
-  phone_number: string;
-  date_of_birth: string;
-  currency: string;
-  monthly_budget: number;
-  notification_preferences: string;
-  onboarding_completed: boolean;
+  first_name?: string;
+  last_name?: string;
+  profile_picture?: string;
+  phone_number?: string;
+  date_of_birth?: string;
+  currency?: string;
+  monthly_budget?: number;
+  notification_preferences?: string;
+  onboarding_completed?: boolean;
+  address?: string;
 }
 
 export interface AuthResponse {
